@@ -6,7 +6,7 @@ const lora = Lora({ subsets: ["latin"], variable: "--font-lora", weight: ["500",
 const raleway = Raleway({ subsets: ["latin"], variable: "--font-raleway", weight: ["400", "500", "600", "700"] });
 
 export const metadata: Metadata = {
-  title: "Luna · Diario de sueño",
+  title: "LetSleep · Diario de sueño",
   description: "Registra siestas y noches, y descubre los horarios de sueño que mejor sientan.",
   robots: { index: false, follow: false },
 };

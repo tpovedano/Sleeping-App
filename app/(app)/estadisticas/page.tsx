@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { appTimezone } from "@/lib/config";
 import { buildDashboard, type RangeWeeks } from "@/lib/stats";
 
-export const metadata: Metadata = { title: "Estadísticas · Luna" };
+export const metadata: Metadata = { title: "Estadísticas · LetSleep" };
 export const dynamic = "force-dynamic";
 
 export default async function EstadisticasPage({ searchParams }: { searchParams: Promise<{ semanas?: string }> }) {

@@ -1,4 +1,4 @@
-export const DEFAULT_TZ = "Europe/Madrid";
+export const DEFAULT_TZ = "America/Costa_Rica";
 export const MINUTE = 60_000;
 export const HOUR = 60 * MINUTE;
 export const DAY = 24 * HOUR;

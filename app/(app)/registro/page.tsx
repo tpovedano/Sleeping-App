@@ -4,7 +4,7 @@ import { SessionList } from "@/components/SessionList";
 import { db } from "@/lib/db";
 import { appTimezone } from "@/lib/config";
 
-export const metadata: Metadata = { title: "Registro · Luna" };
+export const metadata: Metadata = { title: "Registro · LetSleep" };
 export const dynamic = "force-dynamic";
 
 export default async function RegistroPage({

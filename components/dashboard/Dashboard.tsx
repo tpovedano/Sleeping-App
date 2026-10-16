@@ -91,8 +91,8 @@ export function Dashboard({ data }: { data: Data }) {
               tint="from-indigo-400/25"
               label="Sueño total hoy"
               value={formatDuration(today.totalMin)}
-              sub="Noche anterior + siestas"
-              delta={delta(today.totalMin, baseline.totalMin, today.hasData)}
+              sub={today.nightCount > 0 ? "Siestas de hoy + noche de hoy" : "Siestas de hoy · falta la noche"}
+              delta={delta(today.totalMin, baseline.totalMin, today.nightCount > 0)}
               fmt={formatDuration}
               rangeText={rangeText}
             />
@@ -166,7 +166,7 @@ export function Dashboard({ data }: { data: Data }) {
 
           {/* Horas por día */}
           <section aria-labelledby="daily-title" className="card p-5 sm:p-6">
-            <SectionTitle id="daily-title" icon={BedDouble} title="Horas de sueño por día" sub="Noche (atribuida al día en que termina) + siestas" />
+            <SectionTitle id="daily-title" icon={BedDouble} title="Horas de sueño por día" sub="Siestas del día + la noche que empieza ese día" />
             <DailyChart days={data.days} avgTotal={baseline.totalMin} />
           </section>
 

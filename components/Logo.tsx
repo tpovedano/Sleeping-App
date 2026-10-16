@@ -13,7 +13,7 @@ export function Logo({ size = 36 }: { size?: number }) {
         <circle cx="46" cy="20" r="1.6" fill="#e0e7ff" />
         <circle cx="52" cy="30" r="1" fill="#e0e7ff" />
       </svg>
-      <span className="font-serif text-xl font-semibold tracking-tight text-ink">Luna</span>
+      <span className="font-serif text-xl font-semibold tracking-tight text-ink">LetSleep</span>
     </span>
   );
 }

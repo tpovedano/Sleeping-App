@@ -1,4 +1,4 @@
-# Luna · Diario de sueño
+# LetSleep · Diario de sueño
 
 Aplicación web para registrar **siestas** y **sueño nocturno** y analizar tendencias para encontrar los horarios que mejor sientan.
 
@@ -14,7 +14,7 @@ Aplicación web para registrar **siestas** y **sueño nocturno** y analizar tend
   - Humor al despertar según hora de dormir, hora de siesta, tiempo despierto previo y duración de la rutina.
   - Tabla de acompañamiento.
 
-> Cómo se cuenta un día: **noche anterior + siestas del día** (la noche se atribuye al día en que termina).
+> Cómo se cuenta un día: **siestas del día + la noche que empieza ese día** (una noche que empieza pasada la medianoche, p. ej. a las 00:30, sigue contando para el día anterior).
 
 ## Stack
 
@@ -28,7 +28,7 @@ Diseño basado en el design system que genera [UI UX Pro Max](https://github.com
 3. En **Settings → Environment Variables** añade:
    - `APP_PASSWORD` – la contraseña de acceso.
    - `AUTH_SECRET` – una cadena larga aleatoria (p. ej. `openssl rand -base64 32`).
-   - `APP_TIMEZONE` – opcional, por defecto `Europe/Madrid`.
+   - `APP_TIMEZONE` – opcional, por defecto `America/Costa_Rica` (hora de Centroamérica, UTC−6).
 4. Redeploy. La tabla `sleep_sessions` se crea sola en la primera petición (también puedes ejecutar `npm run db:migrate` con `DATABASE_URL` definida; el esquema está en `db/schema.sql`).
 
 Cambiar `APP_PASSWORD` invalida todas las sesiones abiertas.

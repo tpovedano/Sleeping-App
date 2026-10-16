@@ -136,10 +136,11 @@ export const fmtNum = (n: number, digits = 1) =>
 /**
  * Día de sueño al que se atribuye un registro:
  * - siesta → fecha local de inicio
- * - noche → fecha local de la mañana en que termina (inicio + 12 h), así "hoy" = noche anterior + siestas de hoy
+ * - noche → fecha local de la tarde/noche en que empieza (inicio − 12 h, así una noche que empieza a las 00:30
+ *   sigue contando para el día anterior). "Hoy" = siestas de hoy + la noche que empieza hoy.
  */
 export function sleepDayOf(kind: SleepKind, start: number, tz: string): string {
-  return localParts(kind === "night" ? start + 12 * HOUR : start, tz).dateKey;
+  return localParts(kind === "night" ? start - 12 * HOUR : start, tz).dateKey;
 }
 
 function enrich(sessions: SleepSession[], tz: string): Enriched[] {
