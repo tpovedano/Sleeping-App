@@ -1,5 +1,6 @@
 import type { SleepKind, SleepSession } from "./types.ts";
 import { NO_ACCOMPANIMENT } from "./types.ts";
+import { DEFAULT_REFERENCES, WAKE_WINDOW_LABELS, type SleepReferences } from "./references.ts";
 import {
   DAY,
   HOUR,
@@ -23,6 +24,9 @@ export interface DaySummary {
   totalMin: number;
   napCount: number;
   nightCount: number;
+  /** despertares nocturnos de la noche del día */
+  wakings: number;
+  wakingMin: number;
   moodAfterAvg: number | null;
   hasData: boolean;
 }
@@ -38,6 +42,8 @@ export interface PeriodAverages {
   routineMin: number | null;
   bedtime: number | null; // minuto del día
   wakeTime: number | null; // minuto del día
+  wakingsPerNight: number | null;
+  wakingMinPerNight: number | null;
 }
 
 export interface WeekSummary extends PeriodAverages {
@@ -63,6 +69,8 @@ export interface TimelineSegment {
   inProgress: boolean;
   moodAfter: number | null;
   durationMin: number;
+  /** despertares nocturnos dentro del segmento (minutos del día) */
+  wakings: { startMin: number; endMin: number }[];
 }
 
 export interface TimelineDay {
@@ -81,12 +89,56 @@ export interface Insight {
   icon: "sun" | "moon" | "timer" | "hourglass" | "hand" | "trend-up" | "trend-down" | "target";
 }
 
+export type RefStatus = "short" | "ok" | "long";
+
+export interface WakeWindowStat {
+  index: number;
+  label: string;
+  targetMin: number;
+  avgMin: number | null;
+  count: number;
+  ok: number;
+  short: number;
+  long: number;
+}
+
+export interface ReferenceReport {
+  refs: SleepReferences;
+  napTotal: {
+    days: number;
+    within: number;
+    below: number;
+    above: number;
+    avgMin: number | null;
+  };
+  wakeWindows: WakeWindowStat[];
+  lateNaps: { count: number; totalNaps: number; latest: number | null };
+  earlyWakes: { count: number; mornings: number; earliest: number | null };
+}
+
+export interface NextNap {
+  /** índice de la siesta que toca (0 = primera) */
+  index: number;
+  atMin: number;
+  targetMin: number;
+  fromLabel: string;
+  status: "suggested" | "too-late" | "done";
+  overdue: boolean;
+}
+
 export interface Dashboard {
   tz: string;
   weeks: RangeWeeks;
   todayKey: string;
   today: DaySummary;
-  lastNight: { durationMin: number; start: number; end: number; moodAfter: number | null } | null;
+  lastNight: {
+    durationMin: number;
+    start: number;
+    end: number;
+    moodAfter: number | null;
+    wakings: number;
+    wakingMin: number;
+  } | null;
   inProgress: { kind: SleepKind; sinceMin: number } | null;
   baseline: PeriodAverages;
   days: DaySummary[];
@@ -100,12 +152,16 @@ export interface Dashboard {
   moodFlow: { before: number; after: number; count: number }[];
   insights: Insight[];
   sessionCount: number;
+  references: ReferenceReport;
+  nextNap: NextNap | null;
 }
 
 interface Enriched extends SleepSession {
   start: number;
   end: number | null;
+  /** sueño neto (noche: descontando despertares) */
   durationMin: number | null;
+  wakingMin: number;
   routineMin: number | null;
   sleepDay: string;
   awakeBeforeMin: number | null;
@@ -152,11 +208,19 @@ function enrich(sessions: SleepSession[], tz: string): Enriched[] {
     const routine = s.routineStart ? Date.parse(s.routineStart) : null;
     const awake = prevEnd != null && start > prevEnd && start - prevEnd < 14 * HOUR ? (start - prevEnd) / MINUTE : null;
     if (end != null) prevEnd = Math.max(prevEnd ?? 0, end);
+    const gross = end != null ? (end - start) / MINUTE : null;
+    const wakings = s.kind === "night" ? (s.wakings ?? []) : [];
+    const wakingMin = Math.min(
+      gross ?? Infinity,
+      wakings.reduce((a, w) => a + w.durationMin, 0),
+    );
     return {
       ...s,
+      wakings,
       start,
       end,
-      durationMin: end != null ? (end - start) / MINUTE : null,
+      durationMin: gross != null ? gross - wakingMin : null,
+      wakingMin,
       routineMin: routine != null && routine <= start ? (start - routine) / MINUTE : null,
       sleepDay: sleepDayOf(s.kind, start, tz),
       awakeBeforeMin: awake,
@@ -178,6 +242,8 @@ function summarizeDay(dateKey: string, items: Enriched[]): DaySummary {
     totalMin: nightMin + napMin,
     napCount: naps.length,
     nightCount: night.length,
+    wakings: night.reduce((a, s) => a + s.wakings.length, 0),
+    wakingMin: night.reduce((a, s) => a + s.wakingMin, 0),
     moodAfterAvg: mean(nums(done.map((s) => s.moodAfter))),
     hasData: done.length > 0,
   };
@@ -198,7 +264,111 @@ function averages(days: DaySummary[], sessions: Enriched[], tz: string): PeriodA
     routineMin: mean(nums(done.map((s) => s.routineMin))),
     bedtime: clockMean(nights.map((s) => minuteOfDay(s.start, tz))),
     wakeTime: clockMean(nights.map((s) => minuteOfDay(s.end!, tz)), 0),
+    wakingsPerNight: mean(nights.map((s) => s.wakings.length)),
+    wakingMinPerNight: mean(nights.map((s) => s.wakingMin)),
   };
+}
+
+/** Despertar de la mañana y ventanas de vigilia de un día (despertar → 1ª siesta, 1ª → 2ª…). */
+function dayWindows(all: Enriched[], dateKey: string, tz: string) {
+  const naps = all.filter((s) => s.kind === "nap" && s.sleepDay === dateKey).sort((a, b) => a.start - b.start);
+  const firstNap = naps[0]?.start ?? Infinity;
+  let morningWake: number | null = null;
+  for (const s of all) {
+    if (s.kind !== "night" || s.end == null || s.end > firstNap) continue;
+    if (localParts(s.end, tz).dateKey !== dateKey) continue;
+    morningWake = Math.max(morningWake ?? 0, s.end);
+  }
+  const windows: (number | null)[] = naps.map((n, i) => {
+    const prevEnd = i === 0 ? morningWake : naps[i - 1].end;
+    return prevEnd != null && n.start > prevEnd ? (n.start - prevEnd) / MINUTE : null;
+  });
+  return { morningWake, naps, windows };
+}
+
+export function refStatus(actual: number, target: number, tolerance: number): RefStatus {
+  if (actual < target - tolerance) return "short";
+  if (actual > target + tolerance) return "long";
+  return "ok";
+}
+
+function buildReferenceReport(
+  all: Enriched[],
+  pastDays: DaySummary[],
+  dayKeys: string[],
+  firstKey: string,
+  todayKey: string,
+  tz: string,
+  refs: SleepReferences,
+): ReferenceReport {
+  const napDays = pastDays.filter((d) => d.hasData);
+  const napTotal = {
+    days: napDays.length,
+    within: napDays.filter((d) => d.napMin >= refs.napTotalMin.min && d.napMin <= refs.napTotalMin.max).length,
+    below: napDays.filter((d) => d.napMin < refs.napTotalMin.min).length,
+    above: napDays.filter((d) => d.napMin > refs.napTotalMin.max).length,
+    avgMin: mean(napDays.map((d) => d.napMin)),
+  };
+
+  const samples: number[][] = refs.wakeWindowsMin.map(() => []);
+  for (const key of dayKeys) {
+    dayWindows(all, key, tz).windows.forEach((w, i) => {
+      if (w != null && i < samples.length) samples[i].push(w);
+    });
+  }
+  const wakeWindows: WakeWindowStat[] = refs.wakeWindowsMin.map((target, i) => {
+    const st = samples[i].map((v) => refStatus(v, target, refs.wakeWindowToleranceMin));
+    return {
+      index: i,
+      label: WAKE_WINDOW_LABELS[i] ?? `Ventana ${i + 1}`,
+      targetMin: target,
+      avgMin: mean(samples[i]),
+      count: samples[i].length,
+      ok: st.filter((x) => x === "ok").length,
+      short: st.filter((x) => x === "short").length,
+      long: st.filter((x) => x === "long").length,
+    };
+  });
+
+  const inRangeNaps = all.filter((s) => s.kind === "nap" && s.sleepDay >= firstKey && s.sleepDay <= todayKey);
+  const napStarts = inRangeNaps.map((s) => minuteOfDay(s.start, tz));
+  const late = napStarts.filter((m) => m > refs.latestNapStart);
+
+  const morningEnds = all
+    .filter((s) => s.kind === "night" && s.end != null)
+    .filter((s) => {
+      const k = localParts(s.end!, tz).dateKey;
+      return k >= firstKey && k <= todayKey;
+    })
+    .map((s) => minuteOfDay(s.end!, tz));
+  const early = morningEnds.filter((m) => m < refs.earliestMorningWake);
+
+  return {
+    refs,
+    napTotal,
+    wakeWindows,
+    lateNaps: { count: late.length, totalNaps: napStarts.length, latest: late.length ? Math.max(...late) : null },
+    earlyWakes: { count: early.length, mornings: morningEnds.length, earliest: early.length ? Math.min(...early) : null },
+  };
+}
+
+/** Siguiente siesta recomendada para hoy según las ventanas de vigilia de referencia. */
+function suggestNextNap(all: Enriched[], now: number, todayKey: string, tz: string, refs: SleepReferences): NextNap | null {
+  if (all.some((s) => s.end == null && now - s.start < DAY)) return null;
+  const { morningWake, naps } = dayWindows(all, todayKey, tz);
+  if (morningWake == null && !naps.length) return null;
+  const lastEnd = naps.length ? naps[naps.length - 1].end : morningWake;
+  if (lastEnd == null) return null;
+  const index = naps.length;
+  const fromLabel = index === 0 ? "el despertar" : `la ${index}ª siesta`;
+  if (index >= refs.wakeWindowsMin.length) {
+    return { index, atMin: minuteOfDay(lastEnd, tz), targetMin: 0, fromLabel, status: "done", overdue: false };
+  }
+  const targetMin = refs.wakeWindowsMin[index];
+  const at = lastEnd + targetMin * MINUTE;
+  const atMin = minuteOfDay(at, tz);
+  const tooLate = localParts(at, tz).dateKey !== todayKey || atMin > refs.latestNapStart;
+  return { index, atMin, targetMin, fromLabel, status: tooLate ? "too-late" : "suggested", overdue: !tooLate && now > at };
 }
 
 function bucketize<T extends Enriched>(
@@ -267,9 +437,10 @@ const hoursRangeLabel = (lo: number, hi?: number) => {
 
 export function buildDashboard(
   sessions: SleepSession[],
-  opts: { now?: Date; tz: string; weeks: RangeWeeks },
+  opts: { now?: Date; tz: string; weeks: RangeWeeks; refs?: SleepReferences },
 ): Dashboard {
   const { tz, weeks } = opts;
+  const refs = opts.refs ?? DEFAULT_REFERENCES;
   const now = (opts.now ?? new Date()).getTime();
   const todayKey = localParts(now, tz).dateKey;
   const rangeDays = weeks * 7;
@@ -331,7 +502,14 @@ export function buildDashboard(
         endMin: ((b - dayStart) / span) * 1440,
         inProgress: s.end == null,
         moodAfter: s.moodAfter,
-        durationMin: (end - s.start) / MINUTE,
+        durationMin: (end - s.start) / MINUTE - s.wakingMin,
+        wakings: s.wakings
+          .map((w) => {
+            const ws = Math.max(Date.parse(w.at), a);
+            const we = Math.min(Date.parse(w.at) + w.durationMin * MINUTE, b);
+            return { startMin: ((ws - dayStart) / span) * 1440, endMin: ((we - dayStart) / span) * 1440 };
+          })
+          .filter((w) => w.endMin > w.startMin),
       });
     }
     return { dateKey: d.dateKey, label: d.label, segments };
@@ -389,12 +567,26 @@ export function buildDashboard(
           start: minuteOfDay(lastNightS.start, tz),
           end: minuteOfDay(lastNightS.end!, tz),
           moodAfter: lastNightS.moodAfter,
+          wakings: lastNightS.wakings.length,
+          wakingMin: lastNightS.wakingMin,
         }
       : null;
   const open = [...all].reverse().find((s) => s.end == null && now - s.start < DAY);
   const inProgress = open ? { kind: open.kind, sinceMin: (now - open.start) / MINUTE } : null;
 
+  const references = buildReferenceReport(
+    all,
+    pastDays,
+    days.map((d) => d.dateKey),
+    firstKey,
+    todayKey,
+    tz,
+    refs,
+  );
+  const nextNap = suggestNextNap(all, now, todayKey, tz, refs);
+
   const insights = buildInsights({
+    references,
     napStart,
     bedtime,
     routine,
@@ -426,10 +618,13 @@ export function buildDashboard(
     moodFlow,
     insights,
     sessionCount: completed.length,
+    references,
+    nextNap,
   };
 }
 
 function buildInsights(ctx: {
+  references: ReferenceReport;
   napStart: Bucket[];
   bedtime: Bucket[];
   routine: Bucket[];
@@ -442,6 +637,7 @@ function buildInsights(ctx: {
   baseline: PeriodAverages;
 }): Insight[] {
   const out: Insight[] = [];
+  out.push(...referenceInsights(ctx.references, ctx.baseline));
   const mood = (b: Bucket) => `${fmtNum(b.avgMoodAfter!)}/5`;
   const n = (b: Bucket, noun: [string, string]) => `${b.count} ${b.count === 1 ? noun[0] : noun[1]}`;
 
@@ -523,4 +719,86 @@ function buildInsights(ctx: {
     });
   }
   return out;
+}
+
+function referenceInsights(rep: ReferenceReport, baseline: PeriodAverages): Insight[] {
+  const out: Insight[] = [];
+  const { refs } = rep;
+  const range = `${fmtNum(refs.napTotalMin.min / 60)}–${fmtNum(refs.napTotalMin.max / 60)} h`;
+  if (rep.napTotal.days >= 3 && rep.napTotal.avgMin != null) {
+    const avg = rep.napTotal.avgMin;
+    const inRange = avg >= refs.napTotalMin.min && avg <= refs.napTotalMin.max;
+    out.push({
+      id: "ref-nap-total",
+      icon: "sun",
+      tone: inRange ? "good" : "warn",
+      title: inRange
+        ? `Siestas dentro de la referencia (${range})`
+        : avg < refs.napTotalMin.min
+          ? `Siestas por debajo de la referencia (${range})`
+          : `Siestas por encima de la referencia (${range})`,
+      body: `Media de ${formatDuration(avg)} de siesta al día. ${rep.napTotal.within} de ${rep.napTotal.days} días dentro del rango.`,
+    });
+  }
+  const measured = rep.wakeWindows.filter((w) => w.count >= 2 && w.avgMin != null);
+  if (measured.length) {
+    const worst = [...measured].sort(
+      (a, b) => Math.abs(b.avgMin! - b.targetMin) - Math.abs(a.avgMin! - a.targetMin),
+    )[0];
+    const diff = worst.avgMin! - worst.targetMin;
+    if (Math.abs(diff) > refs.wakeWindowToleranceMin) {
+      out.push({
+        id: "ref-wake-window",
+        icon: "hourglass",
+        tone: "warn",
+        title: `Ventana «${worst.label}» ${diff < 0 ? "más corta" : "más larga"} de lo recomendado`,
+        body: `De media ${formatDuration(worst.avgMin)} frente a ${formatDuration(worst.targetMin)} de referencia (${formatDuration(Math.abs(diff))} ${diff < 0 ? "menos" : "más"}).`,
+      });
+    } else {
+      out.push({
+        id: "ref-wake-window",
+        icon: "hourglass",
+        tone: "good",
+        title: "Ventanas de vigilia alineadas con la referencia",
+        body: `Todas las ventanas medidas están a menos de ${refs.wakeWindowToleranceMin} min del objetivo.`,
+      });
+    }
+  }
+  if (rep.lateNaps.count > 0) {
+    out.push({
+      id: "ref-late-naps",
+      icon: "sun",
+      tone: "warn",
+      title: `${rep.lateNaps.count} ${rep.lateNaps.count === 1 ? "siesta empezó" : "siestas empezaron"} después de las ${formatClock(refs.latestNapStart)}`,
+      body: `La más tardía empezó a las ${formatClock(rep.lateNaps.latest!)}. Las siestas tardías pueden retrasar la hora de dormir.`,
+    });
+  }
+  if (rep.earlyWakes.count > 0) {
+    out.push({
+      id: "ref-early-wakes",
+      icon: "moon",
+      tone: "warn",
+      title: `${rep.earlyWakes.count} ${rep.earlyWakes.count === 1 ? "despertar" : "despertares"} antes de las ${formatClock(refs.earliestMorningWake)}`,
+      body: `De ${rep.earlyWakes.mornings} mañanas registradas; el más temprano fue a las ${formatClock(rep.earlyWakes.earliest!)}.`,
+    });
+  }
+  if (baseline.wakingsPerNight != null && baseline.wakingsPerNight > 0) {
+    out.push({
+      id: "night-wakings",
+      icon: "moon",
+      tone: baseline.wakingsPerNight <= 1 ? "info" : "warn",
+      title: `${fmtNum(baseline.wakingsPerNight)} despertares por noche de media`,
+      body: `Unos ${formatDuration(baseline.wakingMinPerNight)} despierto/a cada noche.`,
+    });
+  }
+  return out;
+}
+
+/** Recomendación de próxima siesta a partir de los registros (para la página de registro). */
+export function nextNapFor(
+  sessions: SleepSession[],
+  opts: { now?: Date; tz: string; refs?: SleepReferences },
+): NextNap | null {
+  const now = (opts.now ?? new Date()).getTime();
+  return suggestNextNap(enrich(sessions, opts.tz), now, localParts(now, opts.tz).dateKey, opts.tz, opts.refs ?? DEFAULT_REFERENCES);
 }

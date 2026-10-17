@@ -1,5 +1,13 @@
 export type SleepKind = "nap" | "night";
 
+export interface NightWaking {
+  /** ISO 8601 */
+  at: string;
+  /** duración aproximada en minutos */
+  durationMin: number;
+  accompaniment: string[];
+}
+
 export interface SleepSession {
   id: string;
   kind: SleepKind;
@@ -10,6 +18,8 @@ export interface SleepSession {
   moodBefore: number | null;
   moodAfter: number | null;
   accompaniment: string[];
+  /** Solo en sueño nocturno */
+  wakings: NightWaking[];
   notes: string | null;
 }
 
@@ -37,6 +47,8 @@ export const NO_ACCOMPANIMENT = "Solo/a";
 export const ACCOMPANIMENT_OPTIONS = [
   NO_ACCOMPANIMENT,
   "En brazos",
+  "Cama",
+  "Mano encima",
   "Pecho",
   "Biberón",
   "Mecido",

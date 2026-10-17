@@ -9,7 +9,9 @@ import {
   BedDouble,
   Hand,
   Hourglass,
+  Eye,
   Lightbulb,
+  Scale,
   Moon,
   Sun,
   Sunrise,
@@ -25,6 +27,8 @@ import { formatClock, formatDuration, longDayLabel } from "@/lib/time";
 import { moodLabel } from "@/lib/types";
 import { MoodIcon } from "@/components/MoodIcon";
 import { BucketChart, C, DailyChart, EmptyChart, SleepTimeline, WeeklyMultiples } from "./charts";
+import { ReferencesSection } from "./references";
+import { NextNapCard } from "@/components/NextNapCard";
 
 const RANGES = [1, 2, 3, 4] as const;
 
@@ -68,6 +72,8 @@ export function Dashboard({ data }: { data: Data }) {
         </div>
       )}
 
+      <NextNapCard next={data.nextNap} latestNapStart={data.references.refs.latestNapStart} />
+
       {noData ? (
         <div className="card grid place-items-center gap-3 p-12 text-center">
           <Moon className="size-12 text-night" aria-hidden />
@@ -102,7 +108,13 @@ export function Dashboard({ data }: { data: Data }) {
               label="Última noche"
               value={data.lastNight ? formatDuration(data.lastNight.durationMin) : "—"}
               sub={
-                data.lastNight ? `${formatClock(data.lastNight.start)} → ${formatClock(data.lastNight.end)}` : "Sin registro reciente"
+                data.lastNight
+                  ? `${formatClock(data.lastNight.start)} → ${formatClock(data.lastNight.end)}${
+                      data.lastNight.wakings
+                        ? ` · ${data.lastNight.wakings} ${data.lastNight.wakings === 1 ? "despertar" : "despertares"} (${formatDuration(data.lastNight.wakingMin)})`
+                        : " · sin despertares"
+                    }`
+                  : "Sin registro reciente"
               }
               delta={data.lastNight ? delta(data.lastNight.durationMin, baseline.nightMin, true) : null}
               fmt={formatDuration}
@@ -113,7 +125,9 @@ export function Dashboard({ data }: { data: Data }) {
               tint="from-amber-400/25"
               label="Siestas hoy"
               value={String(today.napCount)}
-              sub={today.napCount ? `${formatDuration(today.napMin)} en total` : "Ninguna todavía"}
+              sub={`${today.napCount ? `${formatDuration(today.napMin)} en total` : "Ninguna todavía"} · ref. ${fmtNum(
+                data.references.refs.napTotalMin.min / 60,
+              )}–${fmtNum(data.references.refs.napTotalMin.max / 60)} h`}
               delta={delta(today.napCount, baseline.napCount, true)}
               fmt={(v) => fmtNum(v)}
               rangeText={rangeText}
@@ -132,12 +146,18 @@ export function Dashboard({ data }: { data: Data }) {
           </section>
 
           {/* Medias del periodo */}
-          <section aria-label="Medias del periodo" className="card grid grid-cols-2 gap-px overflow-hidden bg-line p-0 sm:grid-cols-3 lg:grid-cols-6">
+          <section aria-label="Medias del periodo" className="card grid grid-cols-2 gap-px overflow-hidden bg-line p-0 sm:grid-cols-4">
             <Avg icon={Moon} label="Se duerme (noche)" value={baseline.bedtime != null ? formatClock(baseline.bedtime) : "—"} />
             <Avg icon={AlarmClock} label="Se despierta" value={baseline.wakeTime != null ? formatClock(baseline.wakeTime) : "—"} />
             <Avg icon={BedDouble} label="Sueño / día" value={formatDuration(baseline.totalMin)} />
             <Avg icon={Sun} label="Siestas / día" value={baseline.napCount != null ? fmtNum(baseline.napCount) : "—"} />
             <Avg icon={Timer} label="Rutina media" value={formatDuration(baseline.routineMin)} />
+            <Avg
+              icon={Eye}
+              label="Despertares / noche"
+              value={baseline.wakingsPerNight != null ? fmtNum(baseline.wakingsPerNight) : "—"}
+            />
+            <Avg icon={Eye} label="Despierto / noche" value={formatDuration(baseline.wakingMinPerNight)} />
             <Avg
               icon={Sunrise}
               label="Humor antes → después"
@@ -164,6 +184,17 @@ export function Dashboard({ data }: { data: Data }) {
             </section>
           )}
 
+          {/* Referencias */}
+          <section aria-labelledby="refs-title" className="card p-5 sm:p-6">
+            <SectionTitle
+              id="refs-title"
+              icon={Scale}
+              title="Comparación con las referencias"
+              sub={`Ventanas de vigilia, tiempo de siesta y horarios límite · ${rangeText}`}
+            />
+            <ReferencesSection rep={data.references} days={data.days} />
+          </section>
+
           {/* Horas por día */}
           <section aria-labelledby="daily-title" className="card p-5 sm:p-6">
             <SectionTitle id="daily-title" icon={BedDouble} title="Horas de sueño por día" sub="Siestas del día + la noche que empieza ese día" />
@@ -172,7 +203,7 @@ export function Dashboard({ data }: { data: Data }) {
 
           {/* Patrón */}
           <section aria-labelledby="pattern-title" className="card p-5 sm:p-6">
-            <SectionTitle id="pattern-title" icon={Moon} title="Patrón de sueño" sub="Cada fila es un día de 00:00 a 24:00 · lo más reciente arriba" />
+            <SectionTitle id="pattern-title" icon={Moon} title="Patrón de sueño" sub="Cada fila es un día de 00:00 a 24:00 · lo más reciente arriba · los huecos en la noche son despertares" />
             <SleepTimeline days={data.timeline} />
           </section>
 

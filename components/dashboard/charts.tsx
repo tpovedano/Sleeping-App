@@ -163,6 +163,9 @@ export function DailyChart({ days, avgTotal }: { days: DaySummary[]; avgTotal: n
                         d.hasData
                           ? [
                               { label: "Noche", value: formatDuration(d.nightMin), color: C.night },
+                              ...(d.wakings
+                                ? [{ label: `Despertares (${d.wakings})`, value: `−${formatDuration(d.wakingMin)}` }]
+                                : []),
                               { label: `Siestas (${d.napCount})`, value: formatDuration(d.napMin), color: C.nap },
                               { label: "Total", value: formatDuration(d.totalMin) },
                               ...(d.moodAfterAvg != null ? [{ label: "Humor al despertar", value: `${fmtNum(d.moodAfterAvg)}/5` }] : []),
@@ -228,7 +231,9 @@ export function SleepTimeline({ days }: { days: TimelineDay[] }) {
               {d.segments.map((s, i) => {
                 const label = `${longDayLabel(d.dateKey)} · ${s.kind === "night" ? "Noche" : "Siesta"} ${formatClock(s.startMin)}–${
                   s.inProgress ? "ahora" : formatClock(s.endMin)
-                } · ${formatDuration(s.durationMin)} en total${s.moodAfter ? ` · humor ${s.moodAfter}/5` : ""}`;
+                } · ${formatDuration(s.durationMin)} de sueño${
+                  s.wakings.length ? ` · ${s.wakings.length} ${s.wakings.length === 1 ? "despertar" : "despertares"} en este tramo` : ""
+                }${s.moodAfter ? ` · humor ${s.moodAfter}/5` : ""}`;
                 return (
                   <button
                     key={i}
@@ -248,7 +253,19 @@ export function SleepTimeline({ days }: { days: TimelineDay[] }) {
                           ? C.night
                           : C.nap,
                     }}
-                  />
+                  >
+                    {s.wakings.map((w, j) => (
+                      <span
+                        key={j}
+                        className="absolute inset-y-0 bg-[#0b1020]"
+                        style={{
+                          left: `${((w.startMin - s.startMin) / (s.endMin - s.startMin)) * 100}%`,
+                          width: `max(2px, ${((w.endMin - w.startMin) / (s.endMin - s.startMin)) * 100}%)`,
+                        }}
+                        aria-hidden
+                      />
+                    ))}
+                  </button>
                 );
               })}
             </div>
@@ -275,10 +292,12 @@ export function WeeklyMultiples({ weeks }: { weeks: WeekSummary[] }) {
     { key: "napMin", title: "Tiempo de siesta / día", get: (w) => w.napMin, fmt: (v) => formatDuration(v), color: C.nap },
     { key: "mood", title: "Humor al despertar", get: (w) => w.moodAfter, fmt: (v) => `${fmtNum(v)}/5`, domain: [0, 5], color: C.routine },
     { key: "routine", title: "Duración de la rutina", get: (w) => w.routineMin, fmt: (v) => formatDuration(v), color: C.routine },
+    { key: "wakings", title: "Despertares / noche", get: (w) => w.wakingsPerNight, fmt: (v) => fmtNum(v), color: C.night },
+    { key: "wakingMin", title: "Despierto / noche", get: (w) => w.wakingMinPerNight, fmt: (v) => formatDuration(v), color: C.night },
   ];
   const short = (w: WeekSummary) => (w.index === 0 ? "Actual" : `-${w.index} sem`);
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {metrics.map((m) => {
         const data = weeks.map((w) => ({ name: short(w), full: w.label, range: w.range, value: m.get(w), current: w.index === 0 }));
         const cur = data[data.length - 1]?.value;

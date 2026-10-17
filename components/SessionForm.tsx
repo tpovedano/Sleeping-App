@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Clock, LoaderCircle, Moon, Plus, Save, Sun, X } from "lucide-react";
+import { CheckCircle2, Clock, LoaderCircle, Moon, Plus, Save, Sun, Trash2, X } from "lucide-react";
 import { saveSession, type SaveState } from "@/app/actions/sessions";
 import { ACCOMPANIMENT_OPTIONS, NO_ACCOMPANIMENT, type SleepKind, type SleepSession } from "@/lib/types";
 import { formatDuration } from "@/lib/time";
@@ -25,8 +25,18 @@ interface Fields {
   moodBefore: number | null;
   moodAfter: number | null;
   accompaniment: string[];
+  wakings: WakingField[];
   notes: string;
 }
+
+interface WakingField {
+  key: number;
+  at: string; // datetime-local
+  durationMin: string;
+  accompaniment: string[];
+}
+
+let wakingKey = 0;
 
 const empty = (kind: SleepKind): Fields => ({
   kind,
@@ -36,6 +46,7 @@ const empty = (kind: SleepKind): Fields => ({
   moodBefore: null,
   moodAfter: null,
   accompaniment: [],
+  wakings: [],
   notes: "",
 });
 
@@ -61,6 +72,12 @@ export function SessionForm({ editing, wakeNow }: { editing?: SleepSession | nul
         moodBefore: editing.moodBefore,
         moodAfter: editing.moodAfter,
         accompaniment: editing.accompaniment,
+        wakings: (editing.wakings ?? []).map((w) => ({
+          key: ++wakingKey,
+          at: toLocalInput(w.at),
+          durationMin: String(w.durationMin),
+          accompaniment: w.accompaniment,
+        })),
         notes: editing.notes ?? "",
       });
     } else {
@@ -104,6 +121,21 @@ export function SessionForm({ editing, wakeNow }: { editing?: SleepSession | nul
     setCustom("");
   };
 
+  const addWaking = () =>
+    setF((p) => ({
+      ...p,
+      wakings: [...p.wakings, { key: ++wakingKey, at: "", durationMin: "10", accompaniment: [] }],
+    }));
+  const updateWaking = (key: number, patch: Partial<WakingField>) =>
+    setF((p) => ({ ...p, wakings: p.wakings.map((w) => (w.key === key ? { ...w, ...patch } : w)) }));
+  const removeWaking = (key: number) => setF((p) => ({ ...p, wakings: p.wakings.filter((w) => w.key !== key) }));
+  const wakingsJson = JSON.stringify(
+    f.kind === "night"
+      ? f.wakings.map((w) => ({ at: toIso(w.at), durationMin: Number(w.durationMin), accompaniment: w.accompaniment }))
+      : [],
+  );
+  const wakingTotal = f.wakings.reduce((a, w) => a + (Number(w.durationMin) || 0), 0);
+
   const options = [...ACCOMPANIMENT_OPTIONS, ...f.accompaniment.filter((t) => !(ACCOMPANIMENT_OPTIONS as readonly string[]).includes(t))];
   const isNight = f.kind === "night";
 
@@ -117,6 +149,7 @@ export function SessionForm({ editing, wakeNow }: { editing?: SleepSession | nul
       {f.accompaniment.map((a) => (
         <input key={a} type="hidden" name="accompaniment" value={a} />
       ))}
+      <input type="hidden" name="wakings" value={wakingsJson} />
 
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -273,6 +306,107 @@ export function SessionForm({ editing, wakeNow }: { editing?: SleepSession | nul
           </span>
         </div>
       </fieldset>
+
+      {isNight && (
+        <div role="group" aria-labelledby="wakings-title" className="mb-7 rounded-2xl border border-line bg-white/[0.02] p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 id="wakings-title" className="text-sm font-semibold text-ink">
+              Despertares nocturnos
+              <span className="ml-2 font-normal text-muted">
+                {f.wakings.length
+                  ? `${f.wakings.length} · ${formatDuration(wakingTotal)} despierto/a`
+                  : "Ninguno registrado"}
+              </span>
+            </h3>
+            <button
+              type="button"
+              onClick={addWaking}
+              className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-xl border border-night/40 bg-night/10 px-3 text-xs font-semibold text-indigo-100 transition hover:bg-night/20"
+            >
+              <Plus className="size-4" aria-hidden /> Añadir despertar
+            </button>
+          </div>
+          {f.wakings.length > 0 && (
+            <ol className="space-y-3">
+              {f.wakings.map((w, i) => (
+                <li key={w.key} className="rounded-xl border border-line bg-bg/40 p-3">
+                  <div className="mb-3 flex flex-wrap items-end gap-3">
+                    <span className="grid size-7 shrink-0 place-items-center self-center rounded-full bg-night/20 text-xs font-bold text-indigo-100">
+                      {i + 1}
+                    </span>
+                    <div className="min-w-[12rem] flex-1">
+                      <label htmlFor={`w-at-${w.key}`} className="mb-1 block text-xs text-muted">
+                        Hora del despertar
+                      </label>
+                      <input
+                        id={`w-at-${w.key}`}
+                        type="datetime-local"
+                        value={w.at}
+                        onChange={(e) => updateWaking(w.key, { at: e.target.value })}
+                        required
+                        className="h-10 w-full rounded-xl border border-line-strong bg-bg/60 px-3 text-sm text-ink focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
+                      />
+                    </div>
+                    <div className="w-28">
+                      <label htmlFor={`w-dur-${w.key}`} className="mb-1 block text-xs text-muted">
+                        Duración (min)
+                      </label>
+                      <input
+                        id={`w-dur-${w.key}`}
+                        type="number"
+                        min={1}
+                        max={240}
+                        inputMode="numeric"
+                        value={w.durationMin}
+                        onChange={(e) => updateWaking(w.key, { durationMin: e.target.value })}
+                        required
+                        className="h-10 w-full rounded-xl border border-line-strong bg-bg/60 px-3 text-sm text-ink focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeWaking(w.key)}
+                      className="grid size-10 cursor-pointer place-items-center rounded-xl text-muted transition hover:bg-rose-500/15 hover:text-rose-200"
+                      aria-label={`Quitar despertar ${i + 1}`}
+                    >
+                      <Trash2 className="size-4" aria-hidden />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Acompañamiento del despertar ${i + 1}`}>
+                    {ACCOMPANIMENT_OPTIONS.map((tag) => {
+                      const on = w.accompaniment.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() =>
+                            updateWaking(w.key, {
+                              accompaniment: on
+                                ? w.accompaniment.filter((t) => t !== tag)
+                                : tag === NO_ACCOMPANIMENT
+                                  ? [NO_ACCOMPANIMENT]
+                                  : [...w.accompaniment.filter((t) => t !== NO_ACCOMPANIMENT), tag],
+                            })
+                          }
+                          className={`h-7 cursor-pointer rounded-full border px-2.5 text-xs font-medium transition ${
+                            on
+                              ? "border-night/70 bg-night/20 text-indigo-100"
+                              : "border-line bg-white/[0.03] text-muted hover:border-line-strong hover:text-ink"
+                          }`}
+                        >
+                          {tag === NO_ACCOMPANIMENT ? "Solo/a" : tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className="mt-3 text-xs text-muted">El tiempo despierto se descuenta de las horas de sueño de la noche.</p>
+        </div>
+      )}
 
       <div className="mb-7">
         <label htmlFor="notes" className="mb-2 block text-sm font-medium text-ink-2">

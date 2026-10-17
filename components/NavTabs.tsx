@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, NotebookPen } from "lucide-react";
+import { LayoutDashboard, NotebookPen, SlidersHorizontal } from "lucide-react";
 
 const tabs = [
   { href: "/registro", label: "Registro", icon: NotebookPen },
   { href: "/estadisticas", label: "Estadísticas", icon: LayoutDashboard },
+  { href: "/referencias", label: "Referencias", icon: SlidersHorizontal },
 ];
 
 export function NavTabs({ variant }: { variant: "top" | "bottom" }) {
@@ -15,7 +16,7 @@ export function NavTabs({ variant }: { variant: "top" | "bottom" }) {
     return (
       <nav
         aria-label="Secciones"
-        className="glass fixed inset-x-3 bottom-3 z-40 grid grid-cols-2 gap-1 rounded-2xl p-1.5 shadow-2xl shadow-black/50 sm:hidden"
+        className="glass fixed inset-x-3 bottom-3 z-40 grid grid-cols-3 gap-1 rounded-2xl p-1.5 shadow-2xl shadow-black/50 sm:hidden"
       >
         {tabs.map((t) => {
           const active = path.startsWith(t.href);

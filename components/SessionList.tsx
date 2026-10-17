@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlarmClock, ArrowRight, Moon, Pencil, Sun } from "lucide-react";
+import { AlarmClock, ArrowRight, Eye, Moon, Pencil, Sun } from "lucide-react";
 import type { SleepSession } from "@/lib/types";
 import { moodLabel } from "@/lib/types";
 import { formatClock, formatDuration, longDayLabel, minuteOfDay } from "@/lib/time";
@@ -86,6 +86,18 @@ function SessionItem({ s, tz }: { s: SleepSession; tz: string }) {
             <MoodIcon value={s.moodAfter} className="size-4" />
             <span className="sr-only">Después: {moodLabel(s.moodAfter)}.</span>
           </span>
+          {s.wakings.length > 0 && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-night/15 px-2 py-0.5 text-indigo-100"
+              title={s.wakings
+                .map((w) => `${clock(Date.parse(w.at))} · ${w.durationMin} min${w.accompaniment.length ? ` · ${w.accompaniment.join(", ")}` : ""}`)
+                .join("\n")}
+            >
+              <Eye className="size-3" aria-hidden />
+              {s.wakings.length} {s.wakings.length === 1 ? "despertar" : "despertares"} ·{" "}
+              {formatDuration(s.wakings.reduce((a, w) => a + w.durationMin, 0))}
+            </span>
+          )}
           {s.accompaniment.map((a) => (
             <span key={a} className="rounded-full border border-line px-2 py-0.5">
               {a}

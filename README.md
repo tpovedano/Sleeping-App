@@ -3,7 +3,8 @@
 Aplicación web para registrar **siestas** y **sueño nocturno** y analizar tendencias para encontrar los horarios que mejor sientan.
 
 - **Landing con contraseña** (`/`): acceso privado con una única contraseña (`APP_PASSWORD`) y cookie de sesión firmada (30 días).
-- **Registro** (`/registro`): tipo (siesta/noche), inicio de la rutina, hora de dormirse, hora de despertar (vacía = aún duerme), humor antes y después (1‒5), acompañamiento (varias opciones + texto libre) y notas. Se puede editar, borrar y marcar «Despertó» en un sueño en curso.
+- **Registro** (`/registro`): tipo (siesta/noche), inicio de la rutina, hora de dormirse, hora de despertar (vacía = aún duerme), humor antes y después (1‒5), acompañamiento (varias opciones + texto libre) y notas. En la noche se pueden añadir **despertares nocturnos** (hora, duración aproximada y acompañamiento); su duración se descuenta del sueño nocturno. Se puede editar, borrar y marcar «Despertó» en un sueño en curso. Muestra la **próxima siesta recomendada** según las ventanas de vigilia de referencia.
+- **Referencias** (`/referencias`): parámetros objetivo contra los que se comparan las estadísticas (en esta PoC son fijos, definidos en `lib/references.ts`): siestas de 2–3 h al día; ventanas de vigilia de 2 h, 2 h 30, 2 h 30 y 2 h (despertar → 1ª siesta → … → 4ª); ninguna siesta después de las 17:00; no levantarse antes de las 06:00.
 - **Estadísticas** (`/estadisticas`): dashboard con selector de 1, 2, 3 o 4 semanas:
   - KPIs de hoy (sueño total, última noche, siestas, humor) comparados con la media del periodo.
   - Medias del periodo: hora de dormirse/despertarse, sueño/día, siestas/día, rutina, humor antes → después.
@@ -13,6 +14,8 @@ Aplicación web para registrar **siestas** y **sueño nocturno** y analizar tend
   - Comparativa semana a semana (6 métricas).
   - Humor al despertar según hora de dormir, hora de siesta, tiempo despierto previo y duración de la rutina.
   - Tabla de acompañamiento.
+  - **Comparación con las referencias**: ventanas de vigilia reales frente al objetivo, tiempo de siesta por día frente a la franja de 2–3 h, siestas tardías y despertares tempranos.
+  - Despertares nocturnos: media por noche, tiempo despierto y huecos en el patrón de sueño.
 
 > Cómo se cuenta un día: **siestas del día + la noche que empieza ese día** (una noche que empieza pasada la medianoche, p. ej. a las 00:30, sigue contando para el día anterior).
 
