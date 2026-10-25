@@ -6,7 +6,9 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
   LabelList,
+  Line,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -25,6 +27,7 @@ export const C = {
   night: "#9085e9",
   nap: "#c98500",
   routine: "#199e70",
+  wakings: "#d55181",
   muted: "#3a4363",
   highlight: "#a5b4fc",
 };
@@ -92,13 +95,32 @@ function stackShape(topKey: string, isTop: boolean) {
   return StackSegment;
 }
 
+/** Marcador en forma de rombo (12 px) con anillo del color de la superficie */
+// Recharts inyecta su propio `r`; usamos `size` para que no lo pise
+function DiamondDot(props: { cx?: number; cy?: number; value?: number | null; size?: number }) {
+  const { cx, cy, value, size: r = 6 } = props;
+  if (cx == null || cy == null || value == null) return null;
+  return (
+    <path
+      d={`M${cx},${cy - r} L${cx + r},${cy} L${cx},${cy + r} L${cx - r},${cy} Z`}
+      fill={C.wakings}
+      stroke={C.surface}
+      strokeWidth={2}
+    />
+  );
+}
+
 export function DailyChart({ days, avgTotal }: { days: DaySummary[]; avgTotal: number | null }) {
   const [table, setTable] = useState(false);
   const data = days.map((d) => ({
     ...d,
     night: +(d.nightMin / 60).toFixed(2),
     nap: +(d.napMin / 60).toFixed(2),
+    // sin noche registrada → hueco en la línea (no es lo mismo que 0 despertares)
+    nightWakings: d.nightCount > 0 ? d.wakings : null,
   }));
+  const hasNights = data.some((d) => d.nightWakings != null);
+  const maxWakings = Math.max(2, ...data.map((d) => d.nightWakings ?? 0));
   const dense = days.length > 14;
   return (
     <div>
@@ -128,6 +150,7 @@ export function DailyChart({ days, avgTotal }: { days: DaySummary[]; avgTotal: n
                 <th className="px-3 py-2 font-semibold">Noche</th>
                 <th className="px-3 py-2 font-semibold">Siestas</th>
                 <th className="px-3 py-2 font-semibold">Total</th>
+                <th className="px-3 py-2 font-semibold">Despertares</th>
                 <th className="px-3 py-2 font-semibold">Humor</th>
               </tr>
             </thead>
@@ -138,6 +161,9 @@ export function DailyChart({ days, avgTotal }: { days: DaySummary[]; avgTotal: n
                   <td className="px-3 py-2">{d.hasData ? formatDuration(d.nightMin) : "—"}</td>
                   <td className="px-3 py-2">{d.hasData ? `${d.napCount} · ${formatDuration(d.napMin)}` : "—"}</td>
                   <td className="px-3 py-2 font-semibold text-ink">{d.hasData ? formatDuration(d.totalMin) : "—"}</td>
+                  <td className="px-3 py-2">
+                    {d.nightCount > 0 ? `${d.wakings}${d.wakings ? ` · ${formatDuration(d.wakingMin)}` : ""}` : "—"}
+                  </td>
                   <td className="px-3 py-2">{d.moodAfterAvg != null ? `${fmtNum(d.moodAfterAvg)}/5` : "—"}</td>
                 </tr>
               ))}
@@ -145,11 +171,12 @@ export function DailyChart({ days, avgTotal }: { days: DaySummary[]; avgTotal: n
           </table>
         </div>
       ) : (
-        <div className="h-72 sm:h-80">
+        <>
+        <div className="h-64 sm:h-72">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 8, right: 4, left: -18, bottom: 0 }} barCategoryGap={dense ? "18%" : "28%"}>
+            <BarChart data={data} syncId="daily" margin={{ top: 8, right: 4, left: -18, bottom: 0 }} barCategoryGap={dense ? "18%" : "28%"}>
               <CartesianGrid vertical={false} stroke={C.grid} />
-              <XAxis dataKey="label" {...axisProps} interval="preserveStartEnd" minTickGap={10} tickFormatter={(v: string) => (dense ? v.split(" ")[1] : v)} />
+              <XAxis dataKey="label" {...axisProps} tick={false} height={4} />
               <YAxis {...axisProps} unit=" h" allowDecimals={false} width={56} />
               <Tooltip
                 cursor={{ fill: "rgba(255,255,255,0.04)" }}
@@ -184,6 +211,65 @@ export function DailyChart({ days, avgTotal }: { days: DaySummary[]; avgTotal: n
             </BarChart>
           </ResponsiveContainer>
         </div>
+
+        {/* Despertares nocturnos: gráfica alineada con los mismos días (escala propia, sin doble eje) */}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
+          <p className="flex items-center gap-2 text-xs font-semibold text-ink-2">
+            <svg width="16" height="10" viewBox="0 0 16 10" aria-hidden>
+              <line x1="0" y1="5" x2="16" y2="5" stroke={C.wakings} strokeWidth="2" />
+              <path d="M8,1 L12,5 L8,9 L4,5 Z" fill={C.wakings} />
+            </svg>
+            Despertares nocturnos
+          </p>
+          {!hasNights && <p className="text-xs text-muted">Sin noches registradas en el periodo</p>}
+        </div>
+        <div className="h-32 sm:h-36">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={data} syncId="daily" margin={{ top: 12, right: 4, left: -18, bottom: 0 }}>
+              <CartesianGrid vertical={false} stroke={C.grid} />
+              <XAxis
+                dataKey="label"
+                scale="band"
+                {...axisProps}
+                interval="preserveStartEnd"
+                minTickGap={10}
+                tickFormatter={(v: string) => (dense ? v.split(" ")[1] : v)}
+              />
+              <YAxis {...axisProps} allowDecimals={false} domain={[0, maxWakings]} width={56} />
+              <Tooltip
+                cursor={{ stroke: "rgba(255,255,255,0.15)" }}
+                content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null;
+                  const d = payload[0].payload as DaySummary;
+                  return (
+                    <TooltipBox
+                      title={longDayLabel(d.dateKey)}
+                      rows={
+                        d.nightCount > 0
+                          ? [
+                              { label: "Despertares nocturnos", value: String(d.wakings), color: C.wakings },
+                              ...(d.wakings ? [{ label: "Tiempo despierto", value: formatDuration(d.wakingMin) }] : []),
+                            ]
+                          : [{ label: "Sin noche registrada", value: "" }]
+                      }
+                    />
+                  );
+                }}
+              />
+              <Line
+                type="linear"
+                dataKey="nightWakings"
+                stroke={C.wakings}
+                strokeWidth={2}
+                dot={<DiamondDot />}
+                activeDot={<DiamondDot size={8} />}
+                connectNulls={false}
+                isAnimationActive={false}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+        </>
       )}
     </div>
   );
