@@ -32,7 +32,7 @@ test("siestas fallidas, despertares en siesta y sin rutina", () => {
     // intento fallido 08:00–08:20, luego siesta 08:40–09:40 con un despertar que necesitó ayuda
     nap("f1", "2026-10-15T14:00:00Z", "2026-10-15T14:20:00Z", { failed: true }),
     nap("a", "2026-10-15T14:40:00Z", "2026-10-15T15:40:00Z", {
-      wakings: [{ at: "2026-10-15T15:00:00Z", durationMin: 10, accompaniment: ["Mano encima"] }],
+      wakings: [{ at: "2026-10-15T15:00:00Z", durationMin: 10, accompaniment: ["Mano encima"], milk: false }],
       location: "Carro",
     }),
     // siesta de corrido sin rutina

@@ -6,8 +6,10 @@ export interface Waking {
   at: string;
   /** duración aproximada en minutos */
   durationMin: number;
-  /** ayuda para volver a dormirse ("Solo/a" = se volvió a dormir sin ayuda) */
+  /** ayuda para volver a dormirse, varias posibles ("Solo/a" = se volvió a dormir sin ayuda) */
   accompaniment: string[];
+  /** hubo toma de leche */
+  milk: boolean;
 }
 
 export interface SleepSession {

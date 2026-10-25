@@ -47,7 +47,12 @@ function parseWakings(raw: FormDataEntryValue | null, start: number, end: number
     const durationMin = Math.round(Number(w?.durationMin));
     if (!Number.isFinite(durationMin) || durationMin < 1 || durationMin > 240)
       return "La duración de cada despertar debe estar entre 1 y 240 minutos.";
-    out.push({ at, durationMin, accompaniment: cleanTags(Array.isArray(w?.accompaniment) ? w.accompaniment : []) });
+    out.push({
+      at,
+      durationMin,
+      accompaniment: cleanTags(Array.isArray(w?.accompaniment) ? w.accompaniment : []),
+      milk: w?.milk === true,
+    });
   }
   return out.sort((a, b) => a.at.localeCompare(b.at));
 }

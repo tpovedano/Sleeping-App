@@ -60,7 +60,8 @@ type Row = {
 
 function parseWakings(v: Row["night_wakings"]): Waking[] {
   const arr = typeof v === "string" ? (JSON.parse(v) as Waking[]) : v;
-  return Array.isArray(arr) ? arr : [];
+  // los registros anteriores no tienen `milk`
+  return Array.isArray(arr) ? arr.map((w) => ({ ...w, accompaniment: w.accompaniment ?? [], milk: !!w.milk })) : [];
 }
 
 const iso = (v: string | Date | null) => (v == null ? null : new Date(v).toISOString());

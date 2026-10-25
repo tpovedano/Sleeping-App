@@ -27,6 +27,8 @@ export interface DaySummary {
   /** despertares nocturnos de la noche del día */
   wakings: number;
   wakingMin: number;
+  /** despertares nocturnos con toma de leche */
+  milkFeeds: number;
   /** despertares durante las siestas del día */
   napWakings: number;
   /** intentos de siesta fallidos (no se durmió) */
@@ -265,6 +267,7 @@ function summarizeDay(dateKey: string, items: Enriched[], failedNaps = 0): DaySu
     nightCount: night.length,
     wakings: night.reduce((a, s) => a + s.wakings.length, 0),
     wakingMin: night.reduce((a, s) => a + s.wakingMin, 0),
+    milkFeeds: night.reduce((a, s) => a + s.wakings.filter((w) => w.milk).length, 0),
     napWakings: naps.reduce((a, s) => a + s.wakings.length, 0),
     failedNaps,
     moodAfterAvg: mean(nums(done.map((s) => s.moodAfter))),

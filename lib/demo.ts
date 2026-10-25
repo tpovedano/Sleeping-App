@@ -46,7 +46,7 @@ export function demoSessions(tz: string, now = new Date()): SleepSession[] {
     const end = startMs + durMin * MINUTE;
     const done = end <= nowMs;
     if (kind === "nap" && rnd() < 0.35) {
-      wakings = [{ at: new Date(startMs + durMin * 0.5 * MINUTE).toISOString(), durationMin: Math.round(3 + rnd() * 10), accompaniment: help() }];
+      wakings = [{ at: new Date(startMs + durMin * 0.5 * MINUTE).toISOString(), durationMin: Math.round(3 + rnd() * 10), accompaniment: help(), milk: rnd() < 0.2 }];
     }
     out.push({
       id: `demo-${++id}`,
@@ -88,7 +88,8 @@ export function demoSessions(tz: string, now = new Date()): SleepSession[] {
     const wakings: Waking[] = Array.from({ length: Math.floor(rnd() * 3) }, () => ({
       at: new Date(bed + (1 + rnd() * (durMin / 60 - 2)) * HOUR).toISOString(),
       durationMin: Math.round(5 + rnd() * 25),
-      accompaniment: acc(),
+      accompaniment: rnd() < 0.4 ? [...new Set([...acc(), ...acc()])].filter((t, _, all) => t !== "Solo/a" || all.length === 1) : acc(),
+      milk: rnd() < 0.5,
     })).sort((a, b) => a.at.localeCompare(b.at));
     const end = push("night", bed, durMin, 10 + rnd() * 30, 4.6 - wakings.length * 0.5, wakings);
     if (end == null) break;

@@ -162,7 +162,9 @@ export function DailyChart({ days, avgTotal }: { days: DaySummary[]; avgTotal: n
                   <td className="px-3 py-2">{d.hasData ? `${d.napCount} · ${formatDuration(d.napMin)}` : "—"}</td>
                   <td className="px-3 py-2 font-semibold text-ink">{d.hasData ? formatDuration(d.totalMin) : "—"}</td>
                   <td className="px-3 py-2">
-                    {d.nightCount > 0 ? `${d.wakings}${d.wakings ? ` · ${formatDuration(d.wakingMin)}` : ""}` : "—"}
+                    {d.nightCount > 0
+                      ? `${d.wakings}${d.wakings ? ` · ${formatDuration(d.wakingMin)}` : ""}${d.milkFeeds ? ` · ${d.milkFeeds} ${d.milkFeeds === 1 ? "toma" : "tomas"}` : ""}`
+                      : "—"}
                   </td>
                   <td className="px-3 py-2">{d.moodAfterAvg != null ? `${fmtNum(d.moodAfterAvg)}/5` : "—"}</td>
                 </tr>
@@ -248,7 +250,12 @@ export function DailyChart({ days, avgTotal }: { days: DaySummary[]; avgTotal: n
                         d.nightCount > 0
                           ? [
                               { label: "Despertares nocturnos", value: String(d.wakings), color: C.wakings },
-                              ...(d.wakings ? [{ label: "Tiempo despierto", value: formatDuration(d.wakingMin) }] : []),
+                              ...(d.wakings
+                                ? [
+                                    { label: "Tiempo despierto", value: formatDuration(d.wakingMin) },
+                                    { label: "Tomas de leche", value: String(d.milkFeeds) },
+                                  ]
+                                : []),
                             ]
                           : [{ label: "Sin noche registrada", value: "" }]
                       }

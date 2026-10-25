@@ -8,6 +8,7 @@ import {
   Clock,
   LoaderCircle,
   MapPin,
+  Milk,
   Moon,
   Plus,
   RotateCcw,
@@ -58,6 +59,7 @@ interface WakingField {
   at: string; // datetime-local
   durationMin: string;
   accompaniment: string[];
+  milk: boolean;
 }
 
 let wakingKey = 0;
@@ -131,6 +133,7 @@ export function SessionForm({
           at: toLocalInput(w.at),
           durationMin: String(w.durationMin),
           accompaniment: w.accompaniment,
+          milk: !!w.milk,
         })),
         notes: editing.notes ?? "",
       });
@@ -183,13 +186,18 @@ export function SessionForm({
   const addWaking = () =>
     setF((p) => ({
       ...p,
-      wakings: [...p.wakings, { key: ++wakingKey, at: "", durationMin: isNight ? "10" : "5", accompaniment: [] }],
+      wakings: [...p.wakings, { key: ++wakingKey, at: "", durationMin: isNight ? "10" : "5", accompaniment: [], milk: false }],
     }));
   const updateWaking = (key: number, patch: Partial<WakingField>) =>
     setF((p) => ({ ...p, wakings: p.wakings.map((w) => (w.key === key ? { ...w, ...patch } : w)) }));
   const removeWaking = (key: number) => setF((p) => ({ ...p, wakings: p.wakings.filter((w) => w.key !== key) }));
   const wakingsJson = JSON.stringify(
-    isFailed ? [] : f.wakings.map((w) => ({ at: toIso(w.at), durationMin: Number(w.durationMin), accompaniment: w.accompaniment })),
+    isFailed ? [] : f.wakings.map((w) => ({
+          at: toIso(w.at),
+          durationMin: Number(w.durationMin),
+          accompaniment: w.accompaniment,
+          milk: w.milk,
+        })),
   );
   const wakingTotal = f.wakings.reduce((a, w) => a + (Number(w.durationMin) || 0), 0);
 
@@ -508,7 +516,19 @@ export function SessionForm({
                       <Trash2 className="size-4" aria-hidden />
                     </button>
                   </div>
-                  <p className="mb-1.5 text-xs text-muted">¿Cómo se volvió a dormir?</p>
+                  <label className="mb-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-line bg-white/[0.03] px-3 py-2 text-sm text-ink-2 has-[:checked]:border-sky-400/50 has-[:checked]:bg-sky-400/10 has-[:checked]:text-sky-100">
+                    <input
+                      type="checkbox"
+                      checked={w.milk}
+                      onChange={(e) => updateWaking(w.key, { milk: e.target.checked })}
+                      className="size-4 cursor-pointer accent-sky-400"
+                    />
+                    <Milk className="size-4" aria-hidden />
+                    Hubo toma de leche
+                  </label>
+                  <p className="mb-1.5 text-xs text-muted">
+                    ¿Cómo se volvió a dormir? <span className="opacity-80">· puedes elegir varias</span>
+                  </p>
                   <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Ayuda para volver a dormirse en el despertar ${i + 1}`}>
                     {accOptions.map((tag) => {
                       const on = w.accompaniment.includes(tag);

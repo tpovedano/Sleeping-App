@@ -30,7 +30,7 @@ test("resumen de día y comparativa", () => {
   const s: SleepSession[] = [
     {
       id: "1", kind: "night", routineStart: "2026-10-14T02:40:00Z", sleepStart: "2026-10-14T03:00:00Z",
-      sleepEnd: "2026-10-14T13:00:00Z", moodBefore: 3, moodAfter: 5, accompaniment: ["Pecho"], wakings: [{ at: "2026-10-14T08:00:00Z", durationMin: 20, accompaniment: ["Pecho"] }], failed: false, location: null, notes: null,
+      sleepEnd: "2026-10-14T13:00:00Z", moodBefore: 3, moodAfter: 5, accompaniment: ["Pecho"], wakings: [{ at: "2026-10-14T08:00:00Z", durationMin: 20, accompaniment: ["Pecho"], milk: true }], failed: false, location: null, notes: null,
     },
     {
       id: "2", kind: "nap", routineStart: "2026-10-15T17:50:00Z", sleepStart: "2026-10-15T18:00:00Z",
@@ -51,6 +51,7 @@ test("resumen de día y comparativa", () => {
   // 600 min en cama − 20 min de despertar nocturno
   assert.equal(d13.nightMin, 580);
   assert.equal(d13.wakings, 1);
+  assert.equal(d13.milkFeeds, 1);
   assert.equal(d.days.find((x) => x.dateKey === "2026-10-14")!.totalMin, 0);
   assert.equal(d.days.length, 7);
   assert.ok(d.inProgress);
