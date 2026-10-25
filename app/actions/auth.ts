@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { SESSION_COOKIE, SESSION_MAX_AGE, checkPassword, createSessionToken, expectedPassword } from "@/lib/auth";
+import { SESSION_COOKIE, checkPassword, createSessionToken, expectedPassword, sessionCookieOptions } from "@/lib/auth";
 
 export type LoginState = { error?: string };
 
@@ -14,13 +14,7 @@ export async function login(_prev: LoginState, form: FormData): Promise<LoginSta
     return { error: "Contraseña incorrecta. Inténtalo de nuevo." };
   }
   const jar = await cookies();
-  jar.set(SESSION_COOKIE, await createSessionToken(), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_MAX_AGE,
-  });
+  jar.set(SESSION_COOKIE, await createSessionToken(), sessionCookieOptions());
   redirect("/registro");
 }
 

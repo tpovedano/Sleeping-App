@@ -39,6 +39,8 @@ body {
 }
 
 body {
+  /* red de seguridad: nada puede ensanchar la página más que la pantalla */
+  overflow-x: clip;
   font-family: var(--font-sans);
   font-variant-numeric: lining-nums tabular-nums;
   -webkit-font-smoothing: antialiased;

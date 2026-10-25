@@ -229,7 +229,9 @@ export function SleepTimeline({ days }: { days: TimelineDay[] }) {
                 <span key={t} className="absolute inset-y-0 w-px bg-white/[0.06]" style={{ left: `${(t / 24) * 100}%` }} aria-hidden />
               ))}
               {d.segments.map((s, i) => {
-                const label = `${longDayLabel(d.dateKey)} · ${s.kind === "night" ? "Noche" : "Siesta"} ${formatClock(s.startMin)}–${
+                const label = s.failed
+                  ? `${longDayLabel(d.dateKey)} · Siesta fallida ${formatClock(s.startMin)}–${formatClock(s.endMin)} · intento de ${formatDuration(s.durationMin)}`
+                  : `${longDayLabel(d.dateKey)} · ${s.kind === "night" ? "Noche" : "Siesta"} ${formatClock(s.startMin)}–${
                   s.inProgress ? "ahora" : formatClock(s.endMin)
                 } · ${formatDuration(s.durationMin)} de sueño${
                   s.wakings.length ? ` · ${s.wakings.length} ${s.wakings.length === 1 ? "despertar" : "despertares"} en este tramo` : ""
@@ -247,11 +249,14 @@ export function SleepTimeline({ days }: { days: TimelineDay[] }) {
                     style={{
                       left: `${(s.startMin / 1440) * 100}%`,
                       width: `max(3px, ${((s.endMin - s.startMin) / 1440) * 100}%)`,
-                      background: s.inProgress
-                        ? `repeating-linear-gradient(135deg, ${s.kind === "night" ? C.night : C.nap} 0 4px, transparent 4px 7px)`
-                        : s.kind === "night"
-                          ? C.night
-                          : C.nap,
+                      background: s.failed
+                        ? "transparent"
+                        : s.inProgress
+                          ? `repeating-linear-gradient(135deg, ${s.kind === "night" ? C.night : C.nap} 0 4px, transparent 4px 7px)`
+                          : s.kind === "night"
+                            ? C.night
+                            : C.nap,
+                      border: s.failed ? `1.5px dashed ${C.nap}` : undefined,
                     }}
                   >
                     {s.wakings.map((w, j) => (

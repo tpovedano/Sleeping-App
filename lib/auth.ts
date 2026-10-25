@@ -1,6 +1,8 @@
 // Sesión mínima basada en una cookie firmada con HMAC (Web Crypto: funciona en Proxy y en el servidor).
 export const SESSION_COOKIE = "sleep_session";
-export const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30 días
+export const SESSION_MAX_AGE = 60 * 60 * 24 * 365; // 1 año, renovado en cada visita
+/** Se emite un token nuevo (renovando la caducidad) si el actual tiene más de un día */
+const RENEW_AFTER = 60 * 60 * 24;
 
 const enc = new TextEncoder();
 
@@ -48,6 +50,19 @@ export async function verifySessionToken(token: string | undefined | null): Prom
   if (v !== "v1" || !exp || !sig || Number(exp) * 1000 < Date.now()) return false;
   return safeEqual(sig, await hmac(`v1.${exp}.${expectedPassword() ?? ""}`, key));
 }
+
+export function shouldRenew(token: string | undefined | null): boolean {
+  const exp = Number(token?.split(".")[1]);
+  return Number.isFinite(exp) && exp - Date.now() / 1000 < SESSION_MAX_AGE - RENEW_AFTER;
+}
+
+export const sessionCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: SESSION_MAX_AGE,
+});
 
 export async function checkPassword(input: string): Promise<boolean> {
   const expected = expectedPassword();

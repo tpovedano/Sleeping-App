@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAuth } from "@/lib/session";
-import type { NightWaking, SleepSessionInput } from "@/lib/types";
+import { napNeedsCompletedNight } from "@/lib/rules";
+import type { SleepSessionInput, Waking } from "@/lib/types";
 
-export type SaveState = { error?: string; ok?: boolean; savedAt?: number };
+export type SaveState = { error?: string; ok?: boolean; savedAt?: number; failed?: boolean };
 
 const HOUR = 3_600_000;
 
@@ -28,19 +29,19 @@ function cleanTags(values: unknown[]): string[] {
     .slice(0, 12);
 }
 
-function parseWakings(raw: FormDataEntryValue | null, start: number, end: number | null): NightWaking[] | string {
+function parseWakings(raw: FormDataEntryValue | null, start: number, end: number | null): Waking[] | string {
   if (typeof raw !== "string" || !raw) return [];
   let list: unknown;
   try {
     list = JSON.parse(raw);
   } catch {
-    return "No se pudieron leer los despertares nocturnos.";
+    return "No se pudieron leer los despertares.";
   }
   if (!Array.isArray(list)) return [];
-  const out: NightWaking[] = [];
+  const out: Waking[] = [];
   for (const w of list.slice(0, 20)) {
     const at = parseInstant(typeof w?.at === "string" ? w.at : null);
-    if (!at) return "Indica la hora de cada despertar nocturno.";
+    if (!at) return "Indica la hora de cada despertar.";
     const t = Date.parse(at);
     if (t < start || (end != null && t > end)) return "Cada despertar debe estar entre la hora de dormirse y la de despertar.";
     const durationMin = Math.round(Number(w?.durationMin));
@@ -54,30 +55,36 @@ function parseWakings(raw: FormDataEntryValue | null, start: number, end: number
 function parse(form: FormData): SleepSessionInput | string {
   const kind = form.get("kind");
   if (kind !== "nap" && kind !== "night") return "Elige si es siesta o noche.";
-  const routineStart = parseInstant(form.get("routineStart"));
+  const failed = kind === "nap" && form.get("failed") === "1";
+  const noRoutine = form.get("noRoutine") === "1";
+  const routineStart = noRoutine ? null : parseInstant(form.get("routineStart"));
   const sleepStart = parseInstant(form.get("sleepStart"));
   const sleepEnd = parseInstant(form.get("sleepEnd"));
-  if (!routineStart) return "Indica a qué hora empezó la rutina de sueño.";
-  if (!sleepStart) return "Indica a qué hora se quedó dormido/a.";
+  if (!noRoutine && !routineStart) return "Indica a qué hora empezó la rutina o marca «Sin rutina».";
+  if (!sleepStart) return failed ? "Indica a qué hora empezó el intento." : "Indica a qué hora se quedó dormido/a.";
+  if (failed && !sleepEnd) return "Indica a qué hora se dio por terminado el intento.";
   const s = Date.parse(sleepStart);
-  const r = Date.parse(routineStart);
-  if (r > s) return "La rutina no puede empezar después de quedarse dormido/a.";
-  if (s - r > 6 * HOUR) return "La rutina dura más de 6 horas: revisa las horas.";
+  if (routineStart) {
+    const r = Date.parse(routineStart);
+    if (r > s) return "La rutina no puede empezar después de quedarse dormido/a.";
+    if (s - r > 6 * HOUR) return "La rutina dura más de 6 horas: revisa las horas.";
+  }
   if (sleepEnd) {
     const e = Date.parse(sleepEnd);
-    if (e <= s) return "La hora de despertar debe ser posterior a la de dormirse.";
+    if (e <= s) return failed ? "El fin del intento debe ser posterior a su inicio." : "La hora de despertar debe ser posterior a la de dormirse.";
     if (e - s > 20 * HOUR) return "El sueño dura más de 20 horas: revisa las horas.";
   }
-  if (s > Date.now() + 5 * 60_000) return "La hora de dormirse está en el futuro.";
+  if (s > Date.now() + 5 * 60_000) return "La hora de inicio está en el futuro.";
   const moodBefore = parseMood(form.get("moodBefore"));
   if (!moodBefore) return "Selecciona el estado de ánimo antes de dormir.";
   const moodAfter = sleepEnd ? parseMood(form.get("moodAfter")) : null;
-  if (sleepEnd && !moodAfter) return "Selecciona el estado de ánimo al despertar.";
+  if (sleepEnd && !moodAfter) return failed ? "Selecciona el estado de ánimo al terminar el intento." : "Selecciona el estado de ánimo al despertar.";
   const accompaniment = cleanTags(form.getAll("accompaniment"));
-  const wakings = kind === "night" ? parseWakings(form.get("wakings"), s, sleepEnd ? Date.parse(sleepEnd) : null) : [];
+  const location = String(form.get("location") ?? "").trim().slice(0, 40) || null;
+  const wakings = failed ? [] : parseWakings(form.get("wakings"), s, sleepEnd ? Date.parse(sleepEnd) : null);
   if (typeof wakings === "string") return wakings;
-  const notes = String(form.get("notes") ?? "").trim().slice(0, 500) || null;
-  return { kind, routineStart, sleepStart, sleepEnd, moodBefore, moodAfter, accompaniment, wakings, notes };
+  const notes = String(form.get("notes") ?? "").trim().slice(0, 1000) || null;
+  return { kind, failed, routineStart, sleepStart, sleepEnd, moodBefore, moodAfter, accompaniment, location, wakings, notes };
 }
 
 export async function saveSession(_prev: SaveState, form: FormData): Promise<SaveState> {
@@ -86,6 +93,11 @@ export async function saveSession(_prev: SaveState, form: FormData): Promise<Sav
   if (typeof input === "string") return { error: input };
   const id = String(form.get("id") ?? "");
   try {
+    if (input.kind === "nap") {
+      const around = await db().list(new Date(Date.parse(input.sleepStart) - 48 * HOUR));
+      const err = napNeedsCompletedNight(around, input.sleepStart, id || null);
+      if (err) return { error: err };
+    }
     if (id) await db().update(id, input);
     else await db().create(input);
   } catch (e) {
@@ -95,7 +107,7 @@ export async function saveSession(_prev: SaveState, form: FormData): Promise<Sav
   revalidatePath("/registro");
   revalidatePath("/estadisticas");
   if (id) redirect("/registro");
-  return { ok: true, savedAt: Date.now() };
+  return { ok: true, savedAt: Date.now(), failed: input.failed };
 }
 
 export async function deleteSession(form: FormData) {

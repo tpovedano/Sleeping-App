@@ -1,6 +1,6 @@
 import "server-only";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import type { NightWaking, SleepSession, SleepSessionInput } from "./types";
+import type { Waking, SleepSession, SleepSessionInput } from "./types";
 import { demoSessions } from "./demo";
 import { appTimezone } from "./config";
 
@@ -22,6 +22,17 @@ const SCHEMA = [
   )`,
   `CREATE INDEX IF NOT EXISTS sleep_sessions_sleep_start_idx ON sleep_sessions (sleep_start DESC)`,
   `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS night_wakings jsonb NOT NULL DEFAULT '[]'::jsonb`,
+  `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS location text`,
+  `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS failed boolean NOT NULL DEFAULT false`,
+  // «Cama», «Colecho», «Cochecito» y «Coche» pasaron de acompañamiento a «dónde durmió»
+  `UPDATE sleep_sessions SET
+     location = CASE
+       WHEN 'Cama' = ANY(accompaniment) THEN 'Cama'
+       WHEN 'Colecho' = ANY(accompaniment) THEN 'Colecho'
+       WHEN 'Cochecito' = ANY(accompaniment) THEN 'Cochecito'
+       ELSE 'Carro' END,
+     accompaniment = array_remove(array_remove(array_remove(array_remove(accompaniment, 'Cama'), 'Colecho'), 'Cochecito'), 'Coche')
+   WHERE location IS NULL AND accompaniment && ARRAY['Cama', 'Colecho', 'Cochecito', 'Coche']::text[]`,
 ];
 
 interface Store {
@@ -41,12 +52,14 @@ type Row = {
   mood_before: number | null;
   mood_after: number | null;
   accompaniment: string[] | null;
-  night_wakings: NightWaking[] | string | null;
+  location: string | null;
+  failed: boolean | null;
+  night_wakings: Waking[] | string | null;
   notes: string | null;
 };
 
-function parseWakings(v: Row["night_wakings"]): NightWaking[] {
-  const arr = typeof v === "string" ? (JSON.parse(v) as NightWaking[]) : v;
+function parseWakings(v: Row["night_wakings"]): Waking[] {
+  const arr = typeof v === "string" ? (JSON.parse(v) as Waking[]) : v;
   return Array.isArray(arr) ? arr : [];
 }
 
@@ -56,12 +69,14 @@ function fromRow(r: Row): SleepSession {
   return {
     id: r.id,
     kind: r.kind,
+    failed: !!r.failed,
     routineStart: iso(r.routine_start),
     sleepStart: iso(r.sleep_start)!,
     sleepEnd: iso(r.sleep_end),
     moodBefore: r.mood_before,
     moodAfter: r.mood_after,
     accompaniment: r.accompaniment ?? [],
+    location: r.location,
     wakings: parseWakings(r.night_wakings),
     notes: r.notes,
   };
@@ -98,9 +113,10 @@ function neonStore(url: string): Store {
     async create(i) {
       await ensure();
       const rows = (await sql`
-        INSERT INTO sleep_sessions (kind, routine_start, sleep_start, sleep_end, mood_before, mood_after, accompaniment, night_wakings, notes)
-        VALUES (${i.kind}, ${i.routineStart}, ${i.sleepStart}, ${i.sleepEnd}, ${i.moodBefore}, ${i.moodAfter}, ${i.accompaniment},
-                ${JSON.stringify(i.wakings)}::jsonb, ${i.notes})
+        INSERT INTO sleep_sessions (kind, failed, routine_start, sleep_start, sleep_end, mood_before, mood_after,
+                                    accompaniment, location, night_wakings, notes)
+        VALUES (${i.kind}, ${i.failed}, ${i.routineStart}, ${i.sleepStart}, ${i.sleepEnd}, ${i.moodBefore}, ${i.moodAfter},
+                ${i.accompaniment}, ${i.location}, ${JSON.stringify(i.wakings)}::jsonb, ${i.notes})
         RETURNING *`) as Row[];
       return fromRow(rows[0]);
     },
@@ -109,7 +125,7 @@ function neonStore(url: string): Store {
       await ensure();
       await sql`
         UPDATE sleep_sessions SET
-          kind = ${i.kind}, routine_start = ${i.routineStart}, sleep_start = ${i.sleepStart},
+          kind = ${i.kind}, failed = ${i.failed}, location = ${i.location}, routine_start = ${i.routineStart}, sleep_start = ${i.sleepStart},
           sleep_end = ${i.sleepEnd}, mood_before = ${i.moodBefore}, mood_after = ${i.moodAfter},
           accompaniment = ${i.accompaniment}, night_wakings = ${JSON.stringify(i.wakings)}::jsonb,
           notes = ${i.notes}, updated_at = now()

@@ -1,25 +1,30 @@
 export type SleepKind = "nap" | "night";
 
-export interface NightWaking {
+/** Despertar durante un sueño (noche o siesta) */
+export interface Waking {
   /** ISO 8601 */
   at: string;
   /** duración aproximada en minutos */
   durationMin: number;
+  /** ayuda para volver a dormirse ("Solo/a" = se volvió a dormir sin ayuda) */
   accompaniment: string[];
 }
 
 export interface SleepSession {
   id: string;
   kind: SleepKind;
-  /** ISO 8601 instants */
+  /** Siesta fallida: no llegó a dormirse. sleepStart/sleepEnd = inicio y fin del intento. */
+  failed: boolean;
+  /** ISO 8601 instants; null = no hubo rutina */
   routineStart: string | null;
   sleepStart: string;
   sleepEnd: string | null;
   moodBefore: number | null;
   moodAfter: number | null;
   accompaniment: string[];
-  /** Solo en sueño nocturno */
-  wakings: NightWaking[];
+  /** Dónde durmió */
+  location: string | null;
+  wakings: Waking[];
   notes: string | null;
 }
 
@@ -47,15 +52,24 @@ export const NO_ACCOMPANIMENT = "Solo/a";
 export const ACCOMPANIMENT_OPTIONS = [
   NO_ACCOMPANIMENT,
   "En brazos",
-  "Cama",
   "Mano encima",
   "Pecho",
   "Biberón",
   "Mecido",
-  "Cochecito",
-  "Coche",
-  "Colecho",
   "Chupete",
   "Ruido blanco",
   "Canción / cuento",
 ] as const;
+
+export const LOCATION_OPTIONS = ["Cama", "Colecho", "Cochecito", "Carro", "Casa abuelos"] as const;
+
+/** Etiquetas que antes estaban en «acompañamiento» y ahora son «dónde durmió» */
+export const LEGACY_LOCATION_TAGS: Record<string, string> = {
+  Cama: "Cama",
+  Colecho: "Colecho",
+  Cochecito: "Cochecito",
+  Coche: "Carro",
+};
+
+/** ¿Necesitó ayuda para volver a dormirse en este despertar? */
+export const neededHelp = (w: Waking) => w.accompaniment.some((a) => a !== NO_ACCOMPANIMENT);

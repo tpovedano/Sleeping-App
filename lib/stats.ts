@@ -1,5 +1,5 @@
 import type { SleepKind, SleepSession } from "./types.ts";
-import { NO_ACCOMPANIMENT } from "./types.ts";
+import { NO_ACCOMPANIMENT, neededHelp } from "./types.ts";
 import { DEFAULT_REFERENCES, WAKE_WINDOW_LABELS, type SleepReferences } from "./references.ts";
 import {
   DAY,
@@ -27,6 +27,10 @@ export interface DaySummary {
   /** despertares nocturnos de la noche del día */
   wakings: number;
   wakingMin: number;
+  /** despertares durante las siestas del día */
+  napWakings: number;
+  /** intentos de siesta fallidos (no se durmió) */
+  failedNaps: number;
   moodAfterAvg: number | null;
   hasData: boolean;
 }
@@ -69,7 +73,9 @@ export interface TimelineSegment {
   inProgress: boolean;
   moodAfter: number | null;
   durationMin: number;
-  /** despertares nocturnos dentro del segmento (minutos del día) */
+  /** intento de siesta fallido (no llegó a dormirse) */
+  failed: boolean;
+  /** despertares dentro del segmento (minutos del día) */
   wakings: { startMin: number; endMin: number }[];
 }
 
@@ -126,6 +132,19 @@ export interface NextNap {
   overdue: boolean;
 }
 
+export interface NapQuality {
+  /** siestas completadas en el periodo */
+  naps: number;
+  /** sin ningún despertar */
+  uninterrupted: number;
+  /** con despertares, pero se volvió a dormir sin ayuda */
+  selfSettled: number;
+  /** algún despertar necesitó ayuda */
+  neededHelp: number;
+  /** intentos fallidos */
+  failed: number;
+}
+
 export interface Dashboard {
   tz: string;
   weeks: RangeWeeks;
@@ -149,6 +168,8 @@ export interface Dashboard {
   routine: Bucket[];
   wakeWindow: Bucket[];
   accompaniment: Bucket[];
+  location: Bucket[];
+  napQuality: NapQuality;
   moodFlow: { before: number; after: number; count: number }[];
   insights: Insight[];
   sessionCount: number;
@@ -209,7 +230,7 @@ function enrich(sessions: SleepSession[], tz: string): Enriched[] {
     const awake = prevEnd != null && start > prevEnd && start - prevEnd < 14 * HOUR ? (start - prevEnd) / MINUTE : null;
     if (end != null) prevEnd = Math.max(prevEnd ?? 0, end);
     const gross = end != null ? (end - start) / MINUTE : null;
-    const wakings = s.kind === "night" ? (s.wakings ?? []) : [];
+    const wakings = s.wakings ?? [];
     const wakingMin = Math.min(
       gross ?? Infinity,
       wakings.reduce((a, w) => a + w.durationMin, 0),
@@ -228,7 +249,7 @@ function enrich(sessions: SleepSession[], tz: string): Enriched[] {
   });
 }
 
-function summarizeDay(dateKey: string, items: Enriched[]): DaySummary {
+function summarizeDay(dateKey: string, items: Enriched[], failedNaps = 0): DaySummary {
   const done = items.filter((s) => s.durationMin != null);
   const night = done.filter((s) => s.kind === "night");
   const naps = done.filter((s) => s.kind === "nap");
@@ -244,6 +265,8 @@ function summarizeDay(dateKey: string, items: Enriched[]): DaySummary {
     nightCount: night.length,
     wakings: night.reduce((a, s) => a + s.wakings.length, 0),
     wakingMin: night.reduce((a, s) => a + s.wakingMin, 0),
+    napWakings: naps.reduce((a, s) => a + s.wakings.length, 0),
+    failedNaps,
     moodAfterAvg: mean(nums(done.map((s) => s.moodAfter))),
     hasData: done.length > 0,
   };
@@ -371,6 +394,24 @@ function suggestNextNap(all: Enriched[], now: number, todayKey: string, tz: stri
   return { index, atMin, targetMin, fromLabel, status: tooLate ? "too-late" : "suggested", overdue: !tooLate && now > at };
 }
 
+/** Agrupa por etiquetas (un registro puede tener varias) y ordena por frecuencia. */
+function tagBuckets(items: Enriched[], tagsOf: (s: Enriched) => string[]): Bucket[] {
+  const map = new Map<string, Enriched[]>();
+  for (const s of items) for (const t of tagsOf(s)) map.set(t, [...(map.get(t) ?? []), s]);
+  const buckets: Bucket[] = [...map.entries()]
+    .map(([key, list]) => ({
+      key,
+      label: key,
+      count: list.length,
+      avgMoodAfter: mean(nums(list.map((s) => s.moodAfter))),
+      avgDurationMin: mean(nums(list.map((s) => s.durationMin))),
+      avgRoutineMin: mean(nums(list.map((s) => s.routineMin))),
+    }))
+    .sort((a, b) => b.count - a.count);
+  markBest(buckets);
+  return buckets;
+}
+
 function bucketize<T extends Enriched>(
   items: T[],
   keyOf: (s: T) => { key: string; label: string; order: number } | null,
@@ -446,7 +487,16 @@ export function buildDashboard(
   const rangeDays = weeks * 7;
   const firstKey = addDays(todayKey, -(rangeDays - 1));
 
-  const all = enrich(sessions, tz);
+  // Los intentos fallidos no cuentan como sueño: se tratan aparte
+  const all = enrich(
+    sessions.filter((s) => !s.failed),
+    tz,
+  );
+  const failedAll = sessions
+    .filter((s) => s.failed && s.sleepEnd)
+    .map((s) => ({ ...s, start: Date.parse(s.sleepStart), end: Date.parse(s.sleepEnd!), sleepDay: sleepDayOf("nap", Date.parse(s.sleepStart), tz) }));
+  const failedByDay = new Map<string, number>();
+  for (const f of failedAll) failedByDay.set(f.sleepDay, (failedByDay.get(f.sleepDay) ?? 0) + 1);
   const inRange = all.filter((s) => s.sleepDay >= firstKey && s.sleepDay <= todayKey);
   const completed = inRange.filter((s) => s.durationMin != null);
 
@@ -460,7 +510,7 @@ export function buildDashboard(
   const days: DaySummary[] = [];
   for (let i = rangeDays - 1; i >= 0; i--) {
     const key = addDays(todayKey, -i);
-    days.push(summarizeDay(key, byDay.get(key) ?? []));
+    days.push(summarizeDay(key, byDay.get(key) ?? [], failedByDay.get(key) ?? 0));
   }
   const today = days[days.length - 1];
   const pastDays = days.slice(0, -1);
@@ -510,6 +560,22 @@ export function buildDashboard(
             return { startMin: ((ws - dayStart) / span) * 1440, endMin: ((we - dayStart) / span) * 1440 };
           })
           .filter((w) => w.endMin > w.startMin),
+        failed: false,
+      });
+    }
+    for (const f of failedAll) {
+      if (f.end <= dayStart || f.start >= dayEnd) continue;
+      const a = Math.max(f.start, dayStart);
+      const b = Math.min(f.end, dayEnd);
+      segments.push({
+        kind: "nap",
+        startMin: ((a - dayStart) / span) * 1440,
+        endMin: ((b - dayStart) / span) * 1440,
+        inProgress: false,
+        moodAfter: f.moodAfter,
+        durationMin: (f.end - f.start) / MINUTE,
+        wakings: [],
+        failed: true,
       });
     }
     return { dateKey: d.dateKey, label: d.label, segments };
@@ -525,27 +591,25 @@ export function buildDashboard(
     // ordena las horas de la noche después de las de la tarde
     return { ...b, order: (Number(b.key) - 720 + 1440) % 1440 };
   });
-  const routine = bucketize(completed, (s) => rangeBucket(s.routineMin, [10, 20, 30, 45], minutesRangeLabel));
+  const routine = bucketize(completed, (s) =>
+    s.routineStart == null
+      ? { key: "none", label: "Sin rutina", order: -1 }
+      : rangeBucket(s.routineMin, [10, 20, 30, 45], minutesRangeLabel),
+  );
   const wakeWindow = bucketize(naps, (s) =>
     rangeBucket(s.awakeBeforeMin, [60, 120, 180, 240, 360], hoursRangeLabel),
   );
 
-  const accMap = new Map<string, Enriched[]>();
-  for (const s of completed) {
-    const tags = s.accompaniment.length ? s.accompaniment : [NO_ACCOMPANIMENT];
-    for (const t of tags) accMap.set(t, [...(accMap.get(t) ?? []), s]);
-  }
-  const accompaniment: Bucket[] = [...accMap.entries()]
-    .map(([key, items]) => ({
-      key,
-      label: key,
-      count: items.length,
-      avgMoodAfter: mean(nums(items.map((s) => s.moodAfter))),
-      avgDurationMin: mean(nums(items.map((s) => s.durationMin))),
-      avgRoutineMin: mean(nums(items.map((s) => s.routineMin))),
-    }))
-    .sort((a, b) => b.count - a.count);
-  markBest(accompaniment);
+  const accompaniment = tagBuckets(completed, (s) => (s.accompaniment.length ? s.accompaniment : [NO_ACCOMPANIMENT]));
+  const location = tagBuckets(completed, (s) => (s.location ? [s.location] : []));
+
+  const napQuality: NapQuality = {
+    naps: naps.length,
+    uninterrupted: naps.filter((n) => !n.wakings.length).length,
+    selfSettled: naps.filter((n) => n.wakings.length && !n.wakings.some(neededHelp)).length,
+    neededHelp: naps.filter((n) => n.wakings.some(neededHelp)).length,
+    failed: failedAll.filter((f) => f.sleepDay >= firstKey && f.sleepDay <= todayKey).length,
+  };
 
   const flow = new Map<string, number>();
   for (const s of completed) {
@@ -587,6 +651,7 @@ export function buildDashboard(
 
   const insights = buildInsights({
     references,
+    napQuality,
     napStart,
     bedtime,
     routine,
@@ -615,6 +680,8 @@ export function buildDashboard(
     routine,
     wakeWindow,
     accompaniment,
+    location,
+    napQuality,
     moodFlow,
     insights,
     sessionCount: completed.length,
@@ -625,6 +692,7 @@ export function buildDashboard(
 
 function buildInsights(ctx: {
   references: ReferenceReport;
+  napQuality: NapQuality;
   napStart: Bucket[];
   bedtime: Bucket[];
   routine: Bucket[];
@@ -638,6 +706,26 @@ function buildInsights(ctx: {
 }): Insight[] {
   const out: Insight[] = [];
   out.push(...referenceInsights(ctx.references, ctx.baseline));
+  const q = ctx.napQuality;
+  if (q.naps >= 3) {
+    const pct = Math.round((q.uninterrupted / q.naps) * 100);
+    out.push({
+      id: "nap-quality",
+      icon: "sun",
+      tone: q.neededHelp > q.naps / 3 ? "warn" : pct >= 60 ? "good" : "info",
+      title: `${pct} % de las siestas sin despertares`,
+      body: `${q.uninterrupted} de corrido · ${q.selfSettled} con despertares pero se volvió a dormir sola · ${q.neededHelp} necesitaron ayuda para volver a dormirse.`,
+    });
+  }
+  if (q.failed > 0) {
+    out.push({
+      id: "failed-naps",
+      icon: "sun",
+      tone: "warn",
+      title: `${q.failed} ${q.failed === 1 ? "siesta fallida" : "siestas fallidas"}`,
+      body: "Intentos en los que no llegó a dormirse. Revisa si coinciden con ventanas de vigilia más cortas de lo recomendado.",
+    });
+  }
   const mood = (b: Bucket) => `${fmtNum(b.avgMoodAfter!)}/5`;
   const n = (b: Bucket, noun: [string, string]) => `${b.count} ${b.count === 1 ? noun[0] : noun[1]}`;
 
@@ -800,5 +888,5 @@ export function nextNapFor(
   opts: { now?: Date; tz: string; refs?: SleepReferences },
 ): NextNap | null {
   const now = (opts.now ?? new Date()).getTime();
-  return suggestNextNap(enrich(sessions, opts.tz), now, localParts(now, opts.tz).dateKey, opts.tz, opts.refs ?? DEFAULT_REFERENCES);
+  return suggestNextNap(enrich(sessions.filter((s) => !s.failed), opts.tz), now, localParts(now, opts.tz).dateKey, opts.tz, opts.refs ?? DEFAULT_REFERENCES);
 }

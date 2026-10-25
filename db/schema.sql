@@ -7,7 +7,9 @@ CREATE TABLE IF NOT EXISTS sleep_sessions (
   mood_before    smallint CHECK (mood_before BETWEEN 1 AND 5),
   mood_after     smallint CHECK (mood_after BETWEEN 1 AND 5),
   accompaniment  text[] NOT NULL DEFAULT '{}',
-  night_wakings  jsonb NOT NULL DEFAULT '[]'::jsonb, -- [{ at, durationMin, accompaniment[] }]
+  night_wakings  jsonb NOT NULL DEFAULT '[]'::jsonb, -- despertares (noche o siesta): [{ at, durationMin, accompaniment[] }]
+  location       text,                               -- dónde durmió
+  failed         boolean NOT NULL DEFAULT false,     -- siesta fallida (no se durmió)
   notes          text,
   created_at     timestamptz NOT NULL DEFAULT now(),
   updated_at     timestamptz NOT NULL DEFAULT now(),
@@ -17,5 +19,7 @@ CREATE TABLE IF NOT EXISTS sleep_sessions (
 
 CREATE INDEX IF NOT EXISTS sleep_sessions_sleep_start_idx ON sleep_sessions (sleep_start DESC);
 
--- Migración para bases creadas antes de añadir los despertares nocturnos
+-- Migraciones para bases creadas con versiones anteriores
 ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS night_wakings jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS location text;
+ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS failed boolean NOT NULL DEFAULT false;

@@ -1,4 +1,4 @@
-import type { NightWaking, SleepSession } from "./types.ts";
+import type { Waking, SleepSession } from "./types.ts";
 import { HOUR, MINUTE, addDays, localParts, startOfLocalDay } from "./time.ts";
 
 /** Genera ~4 semanas de datos verosímiles (solo para desarrollo local sin base de datos). */
@@ -12,7 +12,8 @@ export function demoSessions(tz: string, now = new Date()): SleepSession[] {
   const todayKey = localParts(now, tz).dateKey;
   const out: SleepSession[] = [];
   let id = 0;
-  const acc = () => [pick(["Solo/a", "En brazos", "Pecho", "Mecido", "Chupete", "Cama", "Mano encima"])];
+  const acc = () => [pick(["Solo/a", "En brazos", "Pecho", "Mecido", "Chupete", "Mano encima"])];
+  const help = () => [pick(["Solo/a", "Solo/a", "Mano encima", "Pecho", "En brazos"])];
 
   const push = (
     kind: "nap" | "night",
@@ -20,15 +21,39 @@ export function demoSessions(tz: string, now = new Date()): SleepSession[] {
     durMin: number,
     routineMin: number,
     quality: number,
-    wakings: NightWaking[] = [],
+    wakings: Waking[] = [],
   ): number | null => {
     if (startMs > nowMs) return null;
+    // A veces la siesta no sale: intento fallido y nuevo intento 20-40 min después
+    if (kind === "nap" && rnd() < 0.08 && startMs + 30 * MINUTE < nowMs) {
+      out.push({
+        id: `demo-${++id}`,
+        kind,
+        failed: true,
+        routineStart: null,
+        sleepStart: new Date(startMs).toISOString(),
+        sleepEnd: new Date(startMs + 20 * MINUTE).toISOString(),
+        moodBefore: 2,
+        moodAfter: 2,
+        accompaniment: acc(),
+        location: "Cama",
+        wakings: [],
+        notes: null,
+      });
+      startMs += (20 + 10 + rnd() * 20) * MINUTE;
+      if (startMs > nowMs) return null;
+    }
     const end = startMs + durMin * MINUTE;
     const done = end <= nowMs;
+    if (kind === "nap" && rnd() < 0.35) {
+      wakings = [{ at: new Date(startMs + durMin * 0.5 * MINUTE).toISOString(), durationMin: Math.round(3 + rnd() * 10), accompaniment: help() }];
+    }
     out.push({
       id: `demo-${++id}`,
       kind,
-      routineStart: new Date(startMs - routineMin * MINUTE).toISOString(),
+      failed: false,
+      location: kind === "night" ? pick(["Cama", "Cama", "Colecho"]) : pick(["Cama", "Cama", "Cochecito", "Carro", "Casa abuelos"]),
+      routineStart: rnd() < 0.1 ? null : new Date(startMs - routineMin * MINUTE).toISOString(),
       sleepStart: new Date(startMs).toISOString(),
       sleepEnd: done ? new Date(end).toISOString() : null,
       moodBefore: clamp(2 + rnd() * 2.5),
@@ -60,7 +85,7 @@ export function demoSessions(tz: string, now = new Date()): SleepSession[] {
     // Noche
     const bed = base + (19.5 + rnd() * 1.75) * HOUR;
     const durMin = (10.75 - ((bed - base) / HOUR - 19.5) * 0.4 + jitter(0.6)) * 60;
-    const wakings: NightWaking[] = Array.from({ length: Math.floor(rnd() * 3) }, () => ({
+    const wakings: Waking[] = Array.from({ length: Math.floor(rnd() * 3) }, () => ({
       at: new Date(bed + (1 + rnd() * (durMin / 60 - 2)) * HOUR).toISOString(),
       durationMin: Math.round(5 + rnd() * 25),
       accompaniment: acc(),

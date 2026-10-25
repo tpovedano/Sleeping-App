@@ -11,8 +11,12 @@ import {
   Hourglass,
   Eye,
   Lightbulb,
+  MapPin,
   Scale,
   Moon,
+  RotateCcw,
+  XCircle,
+  CheckCircle2,
   Sun,
   Sunrise,
   Target,
@@ -21,7 +25,7 @@ import {
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
-import type { Dashboard as Data, Insight } from "@/lib/stats";
+import type { Bucket, Dashboard as Data, Insight } from "@/lib/stats";
 import { fmtNum } from "@/lib/stats";
 import { formatClock, formatDuration, longDayLabel } from "@/lib/time";
 import { moodLabel } from "@/lib/types";
@@ -195,6 +199,17 @@ export function Dashboard({ data }: { data: Data }) {
             <ReferencesSection rep={data.references} days={data.days} />
           </section>
 
+          {/* Calidad de las siestas */}
+          <section aria-labelledby="napq-title" className="card p-5 sm:p-6">
+            <SectionTitle
+              id="napq-title"
+              icon={Sun}
+              title="¿Cómo fueron las siestas?"
+              sub={`De corrido, con despertares o fallidas · ${rangeText}`}
+            />
+            <NapQualityBar q={data.napQuality} />
+          </section>
+
           {/* Horas por día */}
           <section aria-labelledby="daily-title" className="card p-5 sm:p-6">
             <SectionTitle id="daily-title" icon={BedDouble} title="Horas de sueño por día" sub="Siestas del día + la noche que empieza ese día" />
@@ -203,7 +218,7 @@ export function Dashboard({ data }: { data: Data }) {
 
           {/* Patrón */}
           <section aria-labelledby="pattern-title" className="card p-5 sm:p-6">
-            <SectionTitle id="pattern-title" icon={Moon} title="Patrón de sueño" sub="Cada fila es un día de 00:00 a 24:00 · lo más reciente arriba · los huecos en la noche son despertares" />
+            <SectionTitle id="pattern-title" icon={Moon} title="Patrón de sueño" sub="Cada fila es un día de 00:00 a 24:00 · lo más reciente arriba · los huecos son despertares · contorno discontinuo = siesta fallida" />
             <SleepTimeline days={data.timeline} />
           </section>
 
@@ -242,9 +257,19 @@ export function Dashboard({ data }: { data: Data }) {
           <section aria-labelledby="acc-title" className="card p-5 sm:p-6">
             <SectionTitle id="acc-title" icon={Hand} title="Acompañamiento" sub="Cuánto tarda en dormirse y cómo despierta según la ayuda recibida" />
             {data.accompaniment.length ? (
-              <AccompanimentTable data={data} />
+              <TagTable buckets={data.accompaniment} title="Acompañamiento" />
             ) : (
               <EmptyChart text="Sin datos de acompañamiento en este periodo." />
+            )}
+          </section>
+
+          {/* Dónde durmió */}
+          <section aria-labelledby="loc-title" className="card p-5 sm:p-6">
+            <SectionTitle id="loc-title" icon={MapPin} title="Dónde durmió" sub="Duración y humor al despertar según el lugar" />
+            {data.location.length ? (
+              <TagTable buckets={data.location} title="Lugar" />
+            ) : (
+              <EmptyChart text="Indica dónde durmió en los registros para ver esta tabla." />
             )}
           </section>
         </>
@@ -363,14 +388,14 @@ function InsightCard({ insight }: { insight: Insight }) {
   );
 }
 
-function AccompanimentTable({ data }: { data: Data }) {
-  const maxRoutine = Math.max(1, ...data.accompaniment.map((a) => a.avgRoutineMin ?? 0));
+function TagTable({ buckets, title }: { buckets: Bucket[]; title: string }) {
+  const maxRoutine = Math.max(1, ...buckets.map((a) => a.avgRoutineMin ?? 0));
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[34rem] text-left text-sm">
         <thead className="text-xs text-muted">
           <tr>
-            <th className="pb-2 font-semibold">Acompañamiento</th>
+            <th className="pb-2 font-semibold">{title}</th>
             <th className="pb-2 font-semibold">Veces</th>
             <th className="w-2/5 pb-2 font-semibold">Tiempo hasta dormirse</th>
             <th className="pb-2 font-semibold">Duración media</th>
@@ -378,7 +403,7 @@ function AccompanimentTable({ data }: { data: Data }) {
           </tr>
         </thead>
         <tbody>
-          {data.accompaniment.map((a) => (
+          {buckets.map((a) => (
             <tr key={a.key} className="border-t border-line">
               <td className="py-2.5 pr-3 font-medium text-ink">
                 {a.label}
@@ -407,6 +432,42 @@ function AccompanimentTable({ data }: { data: Data }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function NapQualityBar({ q }: { q: Data["napQuality"] }) {
+  const total = q.naps + q.failed;
+  if (!total) return <EmptyChart text="Sin siestas en este periodo." />;
+  const parts = [
+    { key: "u", label: "De corrido", value: q.uninterrupted, color: C.nap, Icon: CheckCircle2 },
+    { key: "s", label: "Se despertó y se volvió a dormir sola", value: q.selfSettled, color: "#e0b45c", Icon: RotateCcw },
+    { key: "h", label: "Necesitó ayuda para volver a dormirse", value: q.neededHelp, color: C.night, Icon: Hand },
+    { key: "f", label: "Siesta fallida (no se durmió)", value: q.failed, color: "#64748b", Icon: XCircle },
+  ];
+  return (
+    <div>
+      <div className="flex h-4 w-full gap-[2px] overflow-hidden rounded-full" role="img" aria-label={parts.map((p) => `${p.label}: ${p.value}`).join(", ")}>
+        {parts
+          .filter((p) => p.value > 0)
+          .map((p) => (
+            <span key={p.key} style={{ width: `${(p.value / total) * 100}%`, background: p.color }} title={`${p.label}: ${p.value}`} />
+          ))}
+      </div>
+      <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {parts.map((p) => (
+          <li key={p.key} className="rounded-2xl border border-line bg-white/[0.02] p-3">
+            <p className="flex items-center gap-2 text-xs text-ink-2">
+              <span className="size-2.5 shrink-0 rounded-sm" style={{ background: p.color }} aria-hidden />
+              <p.Icon className="size-3.5 shrink-0 text-muted" aria-hidden />
+              {p.label}
+            </p>
+            <p className="mt-1 text-2xl font-semibold text-ink">
+              {p.value} <span className="text-sm font-normal text-muted">({Math.round((p.value / total) * 100)} %)</span>
+            </p>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

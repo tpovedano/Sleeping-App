@@ -2,8 +2,14 @@
 
 Aplicación web para registrar **siestas** y **sueño nocturno** y analizar tendencias para encontrar los horarios que mejor sientan.
 
-- **Landing con contraseña** (`/`): acceso privado con una única contraseña (`APP_PASSWORD`) y cookie de sesión firmada (30 días).
-- **Registro** (`/registro`): tipo (siesta/noche), inicio de la rutina, hora de dormirse, hora de despertar (vacía = aún duerme), humor antes y después (1‒5), acompañamiento (varias opciones + texto libre) y notas. En la noche se pueden añadir **despertares nocturnos** (hora, duración aproximada y acompañamiento); su duración se descuenta del sueño nocturno. Se puede editar, borrar y marcar «Despertó» en un sueño en curso. Muestra la **próxima siesta recomendada** según las ventanas de vigilia de referencia.
+- **Landing con contraseña** (`/`): acceso privado con una única contraseña (`APP_PASSWORD`) y cookie de sesión firmada de 1 año que se renueva sola con el uso.
+- **Registro** (`/registro`):
+  - Siesta o noche; inicio de la rutina (o «No hubo rutina»), hora de dormirse y de despertar (vacía = aún duerme; «Aún duerme» borra un despertar puesto por error).
+  - Humor antes y después (1‒5), **acompañamiento** (varias opciones) y **dónde durmió** (Cama, Colecho, Cochecito, Carro, Casa abuelos u otro lugar). Las opciones personalizadas que se usan quedan disponibles para siguientes registros.
+  - **Despertares** en noches y siestas: hora, duración aproximada y cómo se volvió a dormir (sola/o o con qué ayuda). El tiempo despierto se descuenta del sueño.
+  - **Siesta fallida**: si no llegó a dormirse se registra el intento (inicio y fin) y se puede registrar otro intento a continuación.
+  - Una siesta solo se puede registrar si la noche anterior está completa (con hora de despertar).
+  - Muestra la **próxima siesta recomendada** según las ventanas de vigilia de referencia.
 - **Referencias** (`/referencias`): parámetros objetivo contra los que se comparan las estadísticas (en esta PoC son fijos, definidos en `lib/references.ts`): siestas de 2–3 h al día; ventanas de vigilia de 2 h, 2 h 30, 2 h 30 y 2 h (despertar → 1ª siesta → … → 4ª); ninguna siesta después de las 17:00; no levantarse antes de las 06:00.
 - **Estadísticas** (`/estadisticas`): dashboard con selector de 1, 2, 3 o 4 semanas:
   - KPIs de hoy (sueño total, última noche, siestas, humor) comparados con la media del periodo.
@@ -16,6 +22,8 @@ Aplicación web para registrar **siestas** y **sueño nocturno** y analizar tend
   - Tabla de acompañamiento.
   - **Comparación con las referencias**: ventanas de vigilia reales frente al objetivo, tiempo de siesta por día frente a la franja de 2–3 h, siestas tardías y despertares tempranos.
   - Despertares nocturnos: media por noche, tiempo despierto y huecos en el patrón de sueño.
+  - ¿Cómo fueron las siestas?: de corrido, con despertares sin ayuda, con ayuda o fallidas.
+  - Tabla de «Dónde durmió».
 
 > Cómo se cuenta un día: **siestas del día + la noche que empieza ese día** (una noche que empieza pasada la medianoche, p. ej. a las 00:30, sigue contando para el día anterior).
 
