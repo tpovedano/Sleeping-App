@@ -8,6 +8,7 @@ Aplicación web para registrar **siestas** y **sueño nocturno** y analizar tend
   - Humor antes y después (1‒5), **acompañamiento** (varias opciones) y **dónde durmió** (Cama, Colecho, Cochecito, Carro, Casa abuelos u otro lugar). Las opciones personalizadas que se usan quedan disponibles para siguientes registros.
   - **Despertares** en noches y siestas: hora, duración aproximada y cómo se volvió a dormir (sola/o o con qué ayuda). El tiempo despierto se descuenta del sueño.
   - Noche: el último despertar se puede marcar como **«No volvió a dormirse»**; entonces dura hasta la hora de despertar, que pasa a ser la hora en que **salió del cuarto**. Campo opcional de **despertar dramático** (se abren las cortinas y empieza el día).
+  - Siesta: igual que la noche, el último despertar puede ser «No volvió a dormirse», y hay un 4.º punto opcional **Fin de la siesta** (ya despierta/o) desde el que se calcula la siguiente siesta.
   - **Siesta fallida**: si no llegó a dormirse se registra el intento (inicio y fin) y se puede registrar otro intento a continuación.
   - Una siesta solo se puede registrar si la noche anterior está completa (con hora de despertar).
   - Muestra la **próxima siesta recomendada** según las ventanas de vigilia de referencia.

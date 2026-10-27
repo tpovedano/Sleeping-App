@@ -30,15 +30,15 @@ test("resumen de día y comparativa", () => {
   const s: SleepSession[] = [
     {
       id: "1", kind: "night", routineStart: "2026-10-14T02:40:00Z", sleepStart: "2026-10-14T03:00:00Z",
-      sleepEnd: "2026-10-14T13:00:00Z", moodBefore: 3, moodAfter: 5, accompaniment: ["Pecho"], wakings: [{ at: "2026-10-14T08:00:00Z", durationMin: 20, accompaniment: ["Pecho"], milk: true, final: false }], failed: false, location: null, dramaticWake: null, notes: null,
+      sleepEnd: "2026-10-14T13:00:00Z", moodBefore: 3, moodAfter: 5, accompaniment: ["Pecho"], wakings: [{ at: "2026-10-14T08:00:00Z", durationMin: 20, accompaniment: ["Pecho"], milk: true, final: false }], failed: false, location: null, dramaticWake: null, napEnd: null, notes: null,
     },
     {
       id: "2", kind: "nap", routineStart: "2026-10-15T17:50:00Z", sleepStart: "2026-10-15T18:00:00Z",
-      sleepEnd: "2026-10-15T19:30:00Z", moodBefore: 2, moodAfter: 4, accompaniment: [], wakings: [], failed: false, location: null, dramaticWake: null, notes: null,
+      sleepEnd: "2026-10-15T19:30:00Z", moodBefore: 2, moodAfter: 4, accompaniment: [], wakings: [], failed: false, location: null, dramaticWake: null, napEnd: null, notes: null,
     },
     {
       id: "3", kind: "nap", routineStart: null, sleepStart: "2026-10-15T21:30:00Z",
-      sleepEnd: null, moodBefore: 3, moodAfter: null, accompaniment: [], wakings: [], failed: false, location: null, dramaticWake: null, notes: null,
+      sleepEnd: null, moodBefore: 3, moodAfter: null, accompaniment: [], wakings: [], failed: false, location: null, dramaticWake: null, napEnd: null, notes: null,
     },
   ];
   const d = buildDashboard(s, { now, tz: TZ, weeks: 1 });
@@ -83,11 +83,11 @@ test("dashboard con datos demo genera tendencias e insights", () => {
 test("referencias: ventanas de vigilia, siestas tardías y próxima siesta", () => {
   const night = (start: string, end: string): SleepSession => ({
     id: start, kind: "night", routineStart: null, sleepStart: start, sleepEnd: end,
-    moodBefore: 3, moodAfter: 4, accompaniment: [], wakings: [], failed: false, location: null, dramaticWake: null, notes: null,
+    moodBefore: 3, moodAfter: 4, accompaniment: [], wakings: [], failed: false, location: null, dramaticWake: null, napEnd: null, notes: null,
   });
   const nap = (start: string, end: string | null): SleepSession => ({
     id: start, kind: "nap", routineStart: null, sleepStart: start, sleepEnd: end,
-    moodBefore: 3, moodAfter: end ? 4 : null, accompaniment: [], wakings: [], failed: false, location: null, dramaticWake: null, notes: null,
+    moodBefore: 3, moodAfter: end ? 4 : null, accompaniment: [], wakings: [], failed: false, location: null, dramaticWake: null, napEnd: null, notes: null,
   });
   // Costa Rica = UTC−6. Día 15: despierta 05:30 (temprano), siestas 07:30–08:30, 11:15–12:45, 17:30–18:00 (tardía)
   const s = [

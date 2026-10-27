@@ -25,6 +25,7 @@ const SCHEMA = [
   `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS location text`,
   `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS failed boolean NOT NULL DEFAULT false`,
   `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS dramatic_wake timestamptz`,
+  `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS nap_end timestamptz`,
   // «Cama», «Colecho», «Cochecito» y «Coche» pasaron de acompañamiento a «dónde durmió»
   `UPDATE sleep_sessions SET
      location = CASE
@@ -56,6 +57,7 @@ type Row = {
   location: string | null;
   failed: boolean | null;
   dramatic_wake: string | Date | null;
+  nap_end: string | Date | null;
   night_wakings: Waking[] | string | null;
   notes: string | null;
 };
@@ -82,6 +84,7 @@ function fromRow(r: Row): SleepSession {
     location: r.location,
     wakings: parseWakings(r.night_wakings),
     dramaticWake: iso(r.dramatic_wake ?? null),
+    napEnd: iso(r.nap_end ?? null),
     notes: r.notes,
   };
 }
@@ -118,9 +121,9 @@ function neonStore(url: string): Store {
       await ensure();
       const rows = (await sql`
         INSERT INTO sleep_sessions (kind, failed, routine_start, sleep_start, sleep_end, mood_before, mood_after,
-                                    accompaniment, location, night_wakings, dramatic_wake, notes)
+                                    accompaniment, location, night_wakings, dramatic_wake, nap_end, notes)
         VALUES (${i.kind}, ${i.failed}, ${i.routineStart}, ${i.sleepStart}, ${i.sleepEnd}, ${i.moodBefore}, ${i.moodAfter},
-                ${i.accompaniment}, ${i.location}, ${JSON.stringify(i.wakings)}::jsonb, ${i.dramaticWake}, ${i.notes})
+                ${i.accompaniment}, ${i.location}, ${JSON.stringify(i.wakings)}::jsonb, ${i.dramaticWake}, ${i.napEnd}, ${i.notes})
         RETURNING *`) as Row[];
       return fromRow(rows[0]);
     },
@@ -129,7 +132,7 @@ function neonStore(url: string): Store {
       await ensure();
       await sql`
         UPDATE sleep_sessions SET
-          kind = ${i.kind}, failed = ${i.failed}, location = ${i.location}, dramatic_wake = ${i.dramaticWake}, routine_start = ${i.routineStart}, sleep_start = ${i.sleepStart},
+          kind = ${i.kind}, failed = ${i.failed}, location = ${i.location}, dramatic_wake = ${i.dramaticWake}, nap_end = ${i.napEnd}, routine_start = ${i.routineStart}, sleep_start = ${i.sleepStart},
           sleep_end = ${i.sleepEnd}, mood_before = ${i.moodBefore}, mood_after = ${i.moodAfter},
           accompaniment = ${i.accompaniment}, night_wakings = ${JSON.stringify(i.wakings)}::jsonb,
           notes = ${i.notes}, updated_at = now()

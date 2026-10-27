@@ -102,6 +102,11 @@ function SessionItem({ s, tz }: { s: SleepSession; tz: string }) {
               <Sunrise className="size-3" aria-hidden /> Despertar dramático {clock(Date.parse(s.dramaticWake))}
             </span>
           )}
+          {s.napEnd && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-nap/15 px-2 py-0.5 text-amber-100">
+              <Sunrise className="size-3" aria-hidden /> Fin de la siesta {clock(Date.parse(s.napEnd))}
+            </span>
+          )}
           {s.location && (
             <span className="inline-flex max-w-full items-center gap-1 break-words">
               <MapPin className="size-3 shrink-0" aria-hidden /> {s.location}

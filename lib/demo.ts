@@ -39,6 +39,7 @@ export function demoSessions(tz: string, now = new Date()): SleepSession[] {
         location: "Cama",
         wakings: [],
         dramaticWake: null,
+        napEnd: null,
         notes: null,
       });
       startMs += (20 + 10 + rnd() * 20) * MINUTE;
@@ -62,9 +63,12 @@ export function demoSessions(tz: string, now = new Date()): SleepSession[] {
       accompaniment: acc(),
       wakings: done ? wakings.filter((w) => Date.parse(w.at) < end) : [],
       dramaticWake: null,
+      // a veces se queda un rato despierta/o antes de dar la siesta por terminada
+      napEnd: kind === "nap" && done && rnd() < 0.3 ? new Date(end + (5 + rnd() * 15) * MINUTE).toISOString() : null,
       notes: null,
     });
-    return done ? end : null;
+    const napEnd = out[out.length - 1].napEnd;
+    return done ? (napEnd ? Date.parse(napEnd) : end) : null;
   };
 
   const targets = [120, 150, 150, 120];

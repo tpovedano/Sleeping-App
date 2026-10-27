@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS sleep_sessions (
   location       text,                               -- dónde durmió
   failed         boolean NOT NULL DEFAULT false,     -- siesta fallida (no se durmió)
   dramatic_wake  timestamptz,                        -- noche: «despertar dramático» (opcional)
+  nap_end        timestamptz,                        -- siesta: fin de la siesta ya despierta/o (opcional)
   notes          text,
   created_at     timestamptz NOT NULL DEFAULT now(),
   updated_at     timestamptz NOT NULL DEFAULT now(),
@@ -25,3 +26,4 @@ ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS night_wakings jsonb NOT NULL
 ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS location text;
 ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS failed boolean NOT NULL DEFAULT false;
 ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS dramatic_wake timestamptz;
+ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS nap_end timestamptz;

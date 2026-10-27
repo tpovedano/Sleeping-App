@@ -196,6 +196,8 @@ interface Enriched extends SleepSession {
   routineMin: number | null;
   sleepDay: string;
   awakeBeforeMin: number | null;
+  /** fin efectivo para la siguiente ventana de vigilia (siesta: «fin de la siesta» si se indicó) */
+  wakeFrom: number | null;
 }
 
 const mean = (xs: number[]): number | null => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
@@ -238,7 +240,8 @@ function enrich(sessions: SleepSession[], tz: string): Enriched[] {
     const end = s.sleepEnd ? Date.parse(s.sleepEnd) : null;
     const routine = s.routineStart ? Date.parse(s.routineStart) : null;
     const awake = prevEnd != null && start > prevEnd && start - prevEnd < 14 * HOUR ? (start - prevEnd) / MINUTE : null;
-    if (end != null) prevEnd = Math.max(prevEnd ?? 0, end);
+    const wakeFrom = end == null ? null : s.kind === "nap" && s.napEnd ? Math.max(end, Date.parse(s.napEnd)) : end;
+    if (wakeFrom != null) prevEnd = Math.max(prevEnd ?? 0, wakeFrom);
     const gross = end != null ? (end - start) / MINUTE : null;
     const wakings = s.wakings ?? [];
     const wakingMin = Math.min(
@@ -255,6 +258,7 @@ function enrich(sessions: SleepSession[], tz: string): Enriched[] {
       routineMin: routine != null && routine <= start ? (start - routine) / MINUTE : null,
       sleepDay: sleepDayOf(s.kind, start, tz),
       awakeBeforeMin: awake,
+      wakeFrom,
     };
   });
 }
@@ -319,7 +323,7 @@ function dayWindows(all: Enriched[], dateKey: string, tz: string) {
     morningWake = Math.max(morningWake ?? 0, s.end);
   }
   const windows: (number | null)[] = naps.map((n, i) => {
-    const prevEnd = i === 0 ? morningWake : naps[i - 1].end;
+    const prevEnd = i === 0 ? morningWake : naps[i - 1].wakeFrom;
     return prevEnd != null && n.start > prevEnd ? (n.start - prevEnd) / MINUTE : null;
   });
   return { morningWake, naps, windows };
@@ -396,7 +400,7 @@ function suggestNextNap(all: Enriched[], now: number, todayKey: string, tz: stri
   if (all.some((s) => s.end == null && now - s.start < DAY)) return null;
   const { morningWake, naps } = dayWindows(all, todayKey, tz);
   if (morningWake == null && !naps.length) return null;
-  const lastEnd = naps.length ? naps[naps.length - 1].end : morningWake;
+  const lastEnd = naps.length ? naps[naps.length - 1].wakeFrom : morningWake;
   if (lastEnd == null) return null;
   const index = naps.length;
   const fromLabel = index === 0 ? "el despertar" : `la ${index}ª siesta`;

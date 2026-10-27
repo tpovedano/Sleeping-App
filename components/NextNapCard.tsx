@@ -32,7 +32,7 @@ export function NextNapCard({ next, latestNapStart }: { next: NextNap | null; la
       </span>
       <span className="text-2xl font-semibold text-ink">{formatClock(next.atMin)}</span>{" "}
       <span className="opacity-90">
-        · {next.index + 1}ª siesta, {formatDuration(next.targetMin)} después de {next.fromLabel}
+        · {next.index + 1}ª siesta, {formatDuration(next.targetMin)} después {next.index === 0 ? "del despertar" : `de ${next.fromLabel}`}
       </span>
     </Shell>
   );

@@ -101,12 +101,18 @@ function parse(form: FormData): SleepSessionInput | string {
   const location = String(form.get("location") ?? "").trim().slice(0, 40) || null;
   const wakings = failed ? [] : parseWakings(form.get("wakings"), s, sleepEnd ? Date.parse(sleepEnd) : null);
   if (typeof wakings === "string") return wakings;
-  if (kind !== "night" && wakings.some((w) => w.final)) return "«No volvió a dormirse» solo aplica a la noche.";
   const dramaticWake = kind === "night" ? parseInstant(form.get("dramaticWake")) : null;
   if (dramaticWake) {
     const d = Date.parse(dramaticWake);
     if (d < s) return "El despertar dramático debe ser posterior a la hora de dormirse.";
     if (sleepEnd && d > Date.parse(sleepEnd) + 4 * HOUR) return "El despertar dramático está muy lejos de la hora de despertar: revisa la hora.";
+  }
+  const napEnd = kind === "nap" && !failed ? parseInstant(form.get("napEnd")) : null;
+  if (napEnd) {
+    if (!sleepEnd) return "Para indicar el fin de la siesta, primero indica a qué hora se despertó.";
+    const ne = Date.parse(napEnd);
+    if (ne < Date.parse(sleepEnd)) return "El fin de la siesta no puede ser anterior a la hora en que se despertó.";
+    if (ne - Date.parse(sleepEnd) > 3 * HOUR) return "El fin de la siesta está a más de 3 horas del despertar: revisa la hora.";
   }
   const notes = String(form.get("notes") ?? "").trim().slice(0, 1000) || null;
   return {
@@ -121,6 +127,7 @@ function parse(form: FormData): SleepSessionInput | string {
     location,
     wakings,
     dramaticWake,
+    napEnd,
     notes,
   };
 }

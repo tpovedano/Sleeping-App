@@ -53,6 +53,7 @@ interface Fields {
   location: string;
   wakings: WakingField[];
   dramaticWake: string;
+  napEnd: string;
   notes: string;
 }
 
@@ -81,6 +82,7 @@ const empty = (kind: SleepKind): Fields => ({
   location: "",
   wakings: [],
   dramaticWake: "",
+  napEnd: "",
   notes: "",
 });
 
@@ -142,6 +144,7 @@ export function SessionForm({
           final: !!w.final,
         })),
         dramaticWake: toLocalInput(editing.dramaticWake),
+        napEnd: toLocalInput(editing.napEnd),
         notes: editing.notes ?? "",
       });
     } else {
@@ -210,7 +213,7 @@ export function SessionForm({
     w.final && w.at && f.sleepEnd
       ? Math.max(0, Math.round((Date.parse(f.sleepEnd) - Date.parse(w.at)) / 60_000))
       : Number(w.durationMin) || 0;
-  const finalWaking = isNight ? f.wakings.find((w) => w.final && w.key === lastWakingKey) : undefined;
+  const finalWaking = isFailed ? undefined : f.wakings.find((w) => w.final && w.key === lastWakingKey);
   const removeWaking = (key: number) => setF((p) => ({ ...p, wakings: p.wakings.filter((w) => w.key !== key) }));
   const wakingsJson = JSON.stringify(
     isFailed ? [] : f.wakings.map((w) => ({
@@ -218,7 +221,7 @@ export function SessionForm({
           durationMin: effDur(w),
           accompaniment: w.accompaniment,
           milk: w.milk,
-          final: isNight && w.final && w.key === lastWakingKey,
+          final: w.final && w.key === lastWakingKey,
         })),
   );
   const wakingTotal = f.wakings.reduce((a, w) => a + effDur(w), 0);
@@ -247,6 +250,7 @@ export function SessionForm({
       ))}
       <input type="hidden" name="wakings" value={wakingsJson} />
       <input type="hidden" name="dramaticWake" value={isNight ? toIso(f.dramaticWake) : ""} />
+      <input type="hidden" name="napEnd" value={!isNight && !isFailed ? toIso(f.napEnd) : ""} />
 
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
@@ -401,7 +405,7 @@ export function SessionForm({
           required={isFailed}
           onClear={
             f.sleepEnd && !isFailed
-              ? () => setF((p) => ({ ...p, sleepEnd: "", moodAfter: null }))
+              ? () => setF((p) => ({ ...p, sleepEnd: "", moodAfter: null, napEnd: "" }))
               : undefined
           }
           clearLabel="Aún duerme"
@@ -415,6 +419,22 @@ export function SessionForm({
             value={f.dramaticWake}
             onChange={(v) => set("dramaticWake", v)}
             onClear={f.dramaticWake ? () => set("dramaticWake", "") : undefined}
+            clearLabel="Borrar"
+          />
+        )}
+        {!isNight && !isFailed && (
+          <TimeField
+            step={4}
+            id="napend"
+            label="Fin de la siesta"
+            hint={
+              f.napEnd && f.sleepEnd && f.napEnd > f.sleepEnd
+                ? `${formatDuration((Date.parse(f.napEnd) - Date.parse(f.sleepEnd)) / 60_000)} despierta/o · la próxima siesta cuenta desde aquí`
+                : "Opcional · ya despierta/o; la próxima siesta cuenta desde aquí"
+            }
+            value={f.napEnd}
+            onChange={(v) => set("napEnd", v)}
+            onClear={f.napEnd ? () => set("napEnd", "") : undefined}
             clearLabel="Borrar"
           />
         )}
@@ -528,7 +548,7 @@ export function SessionForm({
                         className="h-10 w-full min-w-0 rounded-xl border border-line-strong bg-bg/60 px-3 text-sm text-ink focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
                       />
                     </div>
-                    {isNight && w.final && w.key === lastWakingKey ? (
+                    {w.final && w.key === lastWakingKey ? (
                       <div className="w-36">
                         <span className="mb-1 block text-xs text-muted">Despierto/a</span>
                         <span className="flex h-10 items-center rounded-xl border border-dashed border-line-strong px-3 text-sm text-ink-2">
@@ -562,7 +582,7 @@ export function SessionForm({
                       <Trash2 className="size-4" aria-hidden />
                     </button>
                   </div>
-                  {isNight && w.key === lastWakingKey && (
+                  {w.key === lastWakingKey && (
                     <label className="mb-3 mr-2 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-line bg-white/[0.03] px-3 py-2 text-sm text-ink-2 has-[:checked]:border-amber-400/50 has-[:checked]:bg-amber-400/10 has-[:checked]:text-amber-100">
                       <input
                         type="checkbox"
@@ -776,7 +796,7 @@ function TimeField({
           {extra}
         </div>
       </div>
-      <div className="flex min-w-0 items-center gap-2 sm:w-[21rem]">
+      <div className="flex min-w-0 items-center gap-2 sm:w-[21rem] sm:shrink-0">
         <input
           id={id}
           type="datetime-local"

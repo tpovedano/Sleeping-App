@@ -11,7 +11,7 @@ export interface Waking {
   /** hubo toma de leche */
   milk: boolean;
   /**
-   * Último despertar de la noche tras el que no volvió a dormirse:
+   * Último despertar tras el que no volvió a dormirse (noche o siesta):
    * dura hasta la hora de despertar (salida del cuarto).
    */
   final: boolean;
@@ -34,6 +34,11 @@ export interface SleepSession {
   wakings: Waking[];
   /** Noche: hora del «despertar dramático» (se abren las cortinas y empieza el día). Opcional. */
   dramaticWake: string | null;
+  /**
+   * Siesta: fin de la siesta cuando ya estaba despierta/o (p. ej. se queda en la cuna y luego se sale).
+   * Opcional. La siguiente ventana de vigilia se cuenta desde aquí.
+   */
+  napEnd: string | null;
   notes: string | null;
 }
 

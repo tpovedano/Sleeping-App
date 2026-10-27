@@ -8,7 +8,7 @@ import type { SleepSession } from "./types.ts";
 const TZ = "America/Costa_Rica";
 const base = {
   failed: false, routineStart: null, moodBefore: 3, moodAfter: 4, accompaniment: [], location: null,
-  wakings: [], dramaticWake: null, notes: null,
+  wakings: [], dramaticWake: null, napEnd: null, notes: null,
 } satisfies Partial<SleepSession>;
 const night = (id: string, start: string, end: string | null): SleepSession => ({ ...base, id, kind: "night", sleepStart: start, sleepEnd: end });
 const nap = (id: string, start: string, end: string | null, extra: Partial<SleepSession> = {}): SleepSession => ({
@@ -73,4 +73,22 @@ test("noche sin volver a dormirse y despertar dramático", () => {
   assert.equal(d.lastNight?.dramaticWake, 6 * 60 + 30);
   assert.equal(d.baseline.endedAwakeNights, 1);
   assert.equal(d.baseline.dramaticWake, 6 * 60 + 30);
+});
+
+test("fin de la siesta: la siguiente ventana se cuenta desde ahí", () => {
+  const s: SleepSession[] = [
+    night("n1", "2026-10-15T02:00:00Z", "2026-10-15T12:00:00Z"), // sale del cuarto 06:00 CR
+    // 1ª siesta 08:00–09:00, se queda despierta y termina la siesta a las 09:20
+    nap("a", "2026-10-15T14:00:00Z", "2026-10-15T15:00:00Z", { napEnd: "2026-10-15T15:20:00Z" }),
+    // 2ª siesta 11:50: ventana de 2 h 30 desde las 09:20 (no 2 h 50 desde las 09:00)
+    nap("b", "2026-10-15T17:50:00Z", "2026-10-15T18:50:00Z", {
+      wakings: [{ at: "2026-10-15T18:30:00Z", durationMin: 20, accompaniment: [], milk: false, final: true }],
+    }),
+  ];
+  const d = buildDashboard(s, { now: new Date("2026-10-15T19:00:00Z"), tz: TZ, weeks: 1 });
+  assert.equal(d.references.wakeWindows[1].avgMin, 150);
+  assert.equal(d.today.napMin, 60 + 40); // la 1ª entera; la 2ª sin los 20 min que ya no durmió
+  // la próxima siesta se calcula desde el fin de la 2ª (12:50) + 2 h 30
+  const d2 = buildDashboard(s.slice(0, 2), { now: new Date("2026-10-15T16:00:00Z"), tz: TZ, weeks: 1 });
+  assert.equal(d2.nextNap?.atMin, 9 * 60 + 20 + 150);
 });
