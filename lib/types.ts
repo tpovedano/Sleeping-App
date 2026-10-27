@@ -10,6 +10,11 @@ export interface Waking {
   accompaniment: string[];
   /** hubo toma de leche */
   milk: boolean;
+  /**
+   * Último despertar de la noche tras el que no volvió a dormirse:
+   * dura hasta la hora de despertar (salida del cuarto).
+   */
+  final: boolean;
 }
 
 export interface SleepSession {
@@ -27,6 +32,8 @@ export interface SleepSession {
   /** Dónde durmió */
   location: string | null;
   wakings: Waking[];
+  /** Noche: hora del «despertar dramático» (se abren las cortinas y empieza el día). Opcional. */
+  dramaticWake: string | null;
   notes: string | null;
 }
 

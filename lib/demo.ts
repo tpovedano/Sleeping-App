@@ -38,6 +38,7 @@ export function demoSessions(tz: string, now = new Date()): SleepSession[] {
         accompaniment: acc(),
         location: "Cama",
         wakings: [],
+        dramaticWake: null,
         notes: null,
       });
       startMs += (20 + 10 + rnd() * 20) * MINUTE;
@@ -46,7 +47,7 @@ export function demoSessions(tz: string, now = new Date()): SleepSession[] {
     const end = startMs + durMin * MINUTE;
     const done = end <= nowMs;
     if (kind === "nap" && rnd() < 0.35) {
-      wakings = [{ at: new Date(startMs + durMin * 0.5 * MINUTE).toISOString(), durationMin: Math.round(3 + rnd() * 10), accompaniment: help(), milk: rnd() < 0.2 }];
+      wakings = [{ at: new Date(startMs + durMin * 0.5 * MINUTE).toISOString(), durationMin: Math.round(3 + rnd() * 10), accompaniment: help(), milk: rnd() < 0.2, final: false }];
     }
     out.push({
       id: `demo-${++id}`,
@@ -60,6 +61,7 @@ export function demoSessions(tz: string, now = new Date()): SleepSession[] {
       moodAfter: done ? clamp(quality + rnd() - 0.5) : null,
       accompaniment: acc(),
       wakings: done ? wakings.filter((w) => Date.parse(w.at) < end) : [],
+      dramaticWake: null,
       notes: null,
     });
     return done ? end : null;
@@ -90,9 +92,22 @@ export function demoSessions(tz: string, now = new Date()): SleepSession[] {
       durationMin: Math.round(5 + rnd() * 25),
       accompaniment: rnd() < 0.4 ? [...new Set([...acc(), ...acc()])].filter((t, _, all) => t !== "Solo/a" || all.length === 1) : acc(),
       milk: rnd() < 0.5,
+      final: false,
     })).sort((a, b) => a.at.localeCompare(b.at));
     const end = push("night", bed, durMin, 10 + rnd() * 30, 4.6 - wakings.length * 0.5, wakings);
     if (end == null) break;
+    // A veces se despierta antes de tiempo y ya no vuelve a dormirse; luego «despertar dramático»
+    const last = out[out.length - 1];
+    if (rnd() < 0.25) {
+      const at = end - (25 + rnd() * 60) * MINUTE;
+      last.wakings = [
+        ...last.wakings.filter((w) => Date.parse(w.at) < at - 30 * MINUTE),
+        { at: new Date(at).toISOString(), durationMin: Math.round((end - at) / MINUTE), accompaniment: help(), milk: rnd() < 0.5, final: true },
+      ];
+      last.dramaticWake = new Date(end + rnd() * 20 * MINUTE).toISOString();
+    } else if (rnd() < 0.4) {
+      last.dramaticWake = new Date(end + rnd() * 10 * MINUTE).toISOString();
+    }
     morningWake = end;
   }
   return out;

@@ -8,7 +8,7 @@ import type { SleepSession } from "./types.ts";
 const TZ = "America/Costa_Rica";
 const base = {
   failed: false, routineStart: null, moodBefore: 3, moodAfter: 4, accompaniment: [], location: null,
-  wakings: [], notes: null,
+  wakings: [], dramaticWake: null, notes: null,
 } satisfies Partial<SleepSession>;
 const night = (id: string, start: string, end: string | null): SleepSession => ({ ...base, id, kind: "night", sleepStart: start, sleepEnd: end });
 const nap = (id: string, start: string, end: string | null, extra: Partial<SleepSession> = {}): SleepSession => ({
@@ -32,7 +32,7 @@ test("siestas fallidas, despertares en siesta y sin rutina", () => {
     // intento fallido 08:00–08:20, luego siesta 08:40–09:40 con un despertar que necesitó ayuda
     nap("f1", "2026-10-15T14:00:00Z", "2026-10-15T14:20:00Z", { failed: true }),
     nap("a", "2026-10-15T14:40:00Z", "2026-10-15T15:40:00Z", {
-      wakings: [{ at: "2026-10-15T15:00:00Z", durationMin: 10, accompaniment: ["Mano encima"], milk: false }],
+      wakings: [{ at: "2026-10-15T15:00:00Z", durationMin: 10, accompaniment: ["Mano encima"], milk: false, final: false }],
       location: "Carro",
     }),
     // siesta de corrido sin rutina
@@ -57,4 +57,20 @@ test("la sesión se renueva pasado un día", () => {
   assert.equal(shouldRenew(`v1.${now + SESSION_MAX_AGE}.x`), false);
   assert.equal(shouldRenew(`v1.${now + SESSION_MAX_AGE - 2 * 86400}.x`), true);
   assert.equal(shouldRenew(undefined), false);
+});
+
+test("noche sin volver a dormirse y despertar dramático", () => {
+  // 20:00 → sale del cuarto 06:00 (CR); último despertar 05:00 sin volver a dormirse; cortinas 06:30
+  const n: SleepSession = {
+    ...night("n1", "2026-10-15T02:00:00Z", "2026-10-15T12:00:00Z"),
+    wakings: [{ at: "2026-10-15T11:00:00Z", durationMin: 60, accompaniment: ["Mano encima"], milk: true, final: true }],
+    dramaticWake: "2026-10-15T12:30:00Z",
+  };
+  const d = buildDashboard([n], { now: new Date("2026-10-16T00:00:00Z"), tz: TZ, weeks: 1 });
+  const d14 = d.days.find((x) => x.dateKey === "2026-10-14")!;
+  assert.equal(d14.nightMin, 540); // 10 h en cama − 1 h despierto/a
+  assert.equal(d.lastNight?.awakeFrom, 5 * 60);
+  assert.equal(d.lastNight?.dramaticWake, 6 * 60 + 30);
+  assert.equal(d.baseline.endedAwakeNights, 1);
+  assert.equal(d.baseline.dramaticWake, 6 * 60 + 30);
 });

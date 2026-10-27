@@ -44,17 +44,30 @@ function parseWakings(raw: FormDataEntryValue | null, start: number, end: number
     if (!at) return "Indica la hora de cada despertar.";
     const t = Date.parse(at);
     if (t < start || (end != null && t > end)) return "Cada despertar debe estar entre la hora de dormirse y la de despertar.";
-    const durationMin = Math.round(Number(w?.durationMin));
-    if (!Number.isFinite(durationMin) || durationMin < 1 || durationMin > 240)
-      return "La duración de cada despertar debe estar entre 1 y 240 minutos.";
+    const final = w?.final === true;
+    let durationMin: number;
+    if (final) {
+      if (end == null) return "Para marcar que no volvió a dormirse, indica la hora en que salió del cuarto.";
+      // dura hasta la salida del cuarto
+      durationMin = Math.round((end - t) / 60_000);
+      if (durationMin < 1) return "La hora de salir del cuarto debe ser posterior al último despertar.";
+    } else {
+      durationMin = Math.round(Number(w?.durationMin));
+      if (!Number.isFinite(durationMin) || durationMin < 1 || durationMin > 240)
+        return "La duración de cada despertar debe estar entre 1 y 240 minutos.";
+    }
     out.push({
       at,
       durationMin,
       accompaniment: cleanTags(Array.isArray(w?.accompaniment) ? w.accompaniment : []),
       milk: w?.milk === true,
+      final,
     });
   }
-  return out.sort((a, b) => a.at.localeCompare(b.at));
+  out.sort((a, b) => a.at.localeCompare(b.at));
+  if (out.slice(0, -1).some((w) => w.final))
+    return "Solo el último despertar puede marcarse como «no volvió a dormirse».";
+  return out;
 }
 
 function parse(form: FormData): SleepSessionInput | string {
@@ -88,8 +101,28 @@ function parse(form: FormData): SleepSessionInput | string {
   const location = String(form.get("location") ?? "").trim().slice(0, 40) || null;
   const wakings = failed ? [] : parseWakings(form.get("wakings"), s, sleepEnd ? Date.parse(sleepEnd) : null);
   if (typeof wakings === "string") return wakings;
+  if (kind !== "night" && wakings.some((w) => w.final)) return "«No volvió a dormirse» solo aplica a la noche.";
+  const dramaticWake = kind === "night" ? parseInstant(form.get("dramaticWake")) : null;
+  if (dramaticWake) {
+    const d = Date.parse(dramaticWake);
+    if (d < s) return "El despertar dramático debe ser posterior a la hora de dormirse.";
+    if (sleepEnd && d > Date.parse(sleepEnd) + 4 * HOUR) return "El despertar dramático está muy lejos de la hora de despertar: revisa la hora.";
+  }
   const notes = String(form.get("notes") ?? "").trim().slice(0, 1000) || null;
-  return { kind, failed, routineStart, sleepStart, sleepEnd, moodBefore, moodAfter, accompaniment, location, wakings, notes };
+  return {
+    kind,
+    failed,
+    routineStart,
+    sleepStart,
+    sleepEnd,
+    moodBefore,
+    moodAfter,
+    accompaniment,
+    location,
+    wakings,
+    dramaticWake,
+    notes,
+  };
 }
 
 export async function saveSession(_prev: SaveState, form: FormData): Promise<SaveState> {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlarmClock, ArrowRight, Clock, Eye, MapPin, Milk, Moon, Pencil, Sun, XCircle } from "lucide-react";
+import { AlarmClock, ArrowRight, Clock, Eye, MapPin, Milk, Moon, Pencil, Sun, Sunrise, XCircle } from "lucide-react";
 import type { SleepSession } from "@/lib/types";
 import { moodLabel, neededHelp } from "@/lib/types";
 import { formatClock, formatDuration, longDayLabel, minuteOfDay } from "@/lib/time";
@@ -97,6 +97,11 @@ function SessionItem({ s, tz }: { s: SleepSession; tz: string }) {
             <MoodIcon value={s.moodAfter} className="size-4" />
             <span className="sr-only">Después: {moodLabel(s.moodAfter)}.</span>
           </span>
+          {s.dramaticWake && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-300/10 px-2 py-0.5 text-amber-100">
+              <Sunrise className="size-3" aria-hidden /> Despertar dramático {clock(Date.parse(s.dramaticWake))}
+            </span>
+          )}
           {s.location && (
             <span className="inline-flex max-w-full items-center gap-1 break-words">
               <MapPin className="size-3 shrink-0" aria-hidden /> {s.location}
@@ -129,7 +134,13 @@ function SessionItem({ s, tz }: { s: SleepSession; tz: string }) {
                   <Clock className="size-3 text-muted" aria-hidden />
                   {clock(Date.parse(w.at))}
                 </span>
-                <span className="text-muted">· {formatDuration(w.durationMin)}</span>
+                {w.final ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-amber-100">
+                    <Sunrise className="size-3" aria-hidden /> No volvió a dormirse · {formatDuration(w.durationMin)} hasta salir del cuarto
+                  </span>
+                ) : (
+                  <span className="text-muted">· {formatDuration(w.durationMin)}</span>
+                )}
                 <span
                   className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${
                     w.milk ? "bg-sky-400/15 text-sky-100" : "bg-white/5 text-muted"

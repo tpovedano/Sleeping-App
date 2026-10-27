@@ -14,6 +14,7 @@ import {
   RotateCcw,
   Save,
   Sun,
+  Sunrise,
   Trash2,
   TriangleAlert,
   X,
@@ -51,6 +52,7 @@ interface Fields {
   accompaniment: string[];
   location: string;
   wakings: WakingField[];
+  dramaticWake: string;
   notes: string;
 }
 
@@ -60,6 +62,8 @@ interface WakingField {
   durationMin: string;
   accompaniment: string[];
   milk: boolean;
+  /** no volvió a dormirse: dura hasta la hora de despertar (salida del cuarto) */
+  final: boolean;
 }
 
 let wakingKey = 0;
@@ -76,6 +80,7 @@ const empty = (kind: SleepKind): Fields => ({
   accompaniment: [],
   location: "",
   wakings: [],
+  dramaticWake: "",
   notes: "",
 });
 
@@ -134,7 +139,9 @@ export function SessionForm({
           durationMin: String(w.durationMin),
           accompaniment: w.accompaniment,
           milk: !!w.milk,
+          final: !!w.final,
         })),
+        dramaticWake: toLocalInput(editing.dramaticWake),
         notes: editing.notes ?? "",
       });
     } else {
@@ -186,20 +193,35 @@ export function SessionForm({
   const addWaking = () =>
     setF((p) => ({
       ...p,
-      wakings: [...p.wakings, { key: ++wakingKey, at: "", durationMin: isNight ? "10" : "5", accompaniment: [], milk: false }],
+      wakings: [...p.wakings, { key: ++wakingKey, at: "", durationMin: isNight ? "10" : "5", accompaniment: [], milk: false, final: false }],
     }));
   const updateWaking = (key: number, patch: Partial<WakingField>) =>
     setF((p) => ({ ...p, wakings: p.wakings.map((w) => (w.key === key ? { ...w, ...patch } : w)) }));
+  /** Solo el último despertar (por hora) puede ser «no volvió a dormirse» */
+  const lastWakingKey = (() => {
+    const dated = f.wakings.filter((w) => w.at);
+    if (!dated.length) return f.wakings[f.wakings.length - 1]?.key;
+    return dated.reduce((a, b) => (b.at > a.at ? b : a)).key;
+  })();
+  const setFinal = (key: number, final: boolean) =>
+    setF((p) => ({ ...p, wakings: p.wakings.map((w) => ({ ...w, final: w.key === key ? final : false })) }));
+  /** Duración efectiva: si no volvió a dormirse, hasta la hora de despertar */
+  const effDur = (w: WakingField) =>
+    w.final && w.at && f.sleepEnd
+      ? Math.max(0, Math.round((Date.parse(f.sleepEnd) - Date.parse(w.at)) / 60_000))
+      : Number(w.durationMin) || 0;
+  const finalWaking = isNight ? f.wakings.find((w) => w.final && w.key === lastWakingKey) : undefined;
   const removeWaking = (key: number) => setF((p) => ({ ...p, wakings: p.wakings.filter((w) => w.key !== key) }));
   const wakingsJson = JSON.stringify(
     isFailed ? [] : f.wakings.map((w) => ({
           at: toIso(w.at),
-          durationMin: Number(w.durationMin),
+          durationMin: effDur(w),
           accompaniment: w.accompaniment,
           milk: w.milk,
+          final: isNight && w.final && w.key === lastWakingKey,
         })),
   );
-  const wakingTotal = f.wakings.reduce((a, w) => a + (Number(w.durationMin) || 0), 0);
+  const wakingTotal = f.wakings.reduce((a, w) => a + effDur(w), 0);
 
   const accOptions = mergeOptions(ACCOMPANIMENT_OPTIONS, knownAccompaniment, f.accompaniment);
   const locOptions = mergeOptions(LOCATION_OPTIONS, knownLocations, f.location ? [f.location] : []);
@@ -224,6 +246,7 @@ export function SessionForm({
         <input key={a} type="hidden" name="accompaniment" value={a} />
       ))}
       <input type="hidden" name="wakings" value={wakingsJson} />
+      <input type="hidden" name="dramaticWake" value={isNight ? toIso(f.dramaticWake) : ""} />
 
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
@@ -361,9 +384,11 @@ export function SessionForm({
         <TimeField
           step={3}
           id="end"
-          label={isFailed ? "Fin del intento" : "Se despertó"}
+          label={isFailed ? "Fin del intento" : finalWaking ? "Salió del cuarto" : "Se despertó"}
           hint={
-            isFailed
+            finalWaking && finalWaking.at
+              ? `No volvió a dormirse desde las ${finalWaking.at.slice(11, 16)}`
+              : isFailed
               ? sleepMin != null
                 ? `Intento de ${formatDuration(sleepMin)}`
                 : "Cuando se dejó de intentar"
@@ -381,6 +406,18 @@ export function SessionForm({
           }
           clearLabel="Aún duerme"
         />
+        {isNight && (
+          <TimeField
+            step={4}
+            id="dramatic"
+            label="Despertar dramático"
+            hint="Opcional · se abren las cortinas y empieza el día"
+            value={f.dramaticWake}
+            onChange={(v) => set("dramaticWake", v)}
+            onClear={f.dramaticWake ? () => set("dramaticWake", "") : undefined}
+            clearLabel="Borrar"
+          />
+        )}
       </ol>
 
       {(routineMin != null || (sleepMin != null && !isFailed)) && (
@@ -491,6 +528,14 @@ export function SessionForm({
                         className="h-10 w-full min-w-0 rounded-xl border border-line-strong bg-bg/60 px-3 text-sm text-ink focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
                       />
                     </div>
+                    {isNight && w.final && w.key === lastWakingKey ? (
+                      <div className="w-36">
+                        <span className="mb-1 block text-xs text-muted">Despierto/a</span>
+                        <span className="flex h-10 items-center rounded-xl border border-dashed border-line-strong px-3 text-sm text-ink-2">
+                          {f.sleepEnd && w.at ? formatDuration(effDur(w)) : "hasta salir"}
+                        </span>
+                      </div>
+                    ) : (
                     <div className="w-28">
                       <label htmlFor={`w-dur-${w.key}`} className="mb-1 block text-xs text-muted">
                         Duración (min)
@@ -507,6 +552,7 @@ export function SessionForm({
                         className="h-10 w-full rounded-xl border border-line-strong bg-bg/60 px-3 text-sm text-ink focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
                       />
                     </div>
+                    )}
                     <button
                       type="button"
                       onClick={() => removeWaking(w.key)}
@@ -516,6 +562,18 @@ export function SessionForm({
                       <Trash2 className="size-4" aria-hidden />
                     </button>
                   </div>
+                  {isNight && w.key === lastWakingKey && (
+                    <label className="mb-3 mr-2 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-line bg-white/[0.03] px-3 py-2 text-sm text-ink-2 has-[:checked]:border-amber-400/50 has-[:checked]:bg-amber-400/10 has-[:checked]:text-amber-100">
+                      <input
+                        type="checkbox"
+                        checked={w.final}
+                        onChange={(e) => setFinal(w.key, e.target.checked)}
+                        className="size-4 cursor-pointer accent-amber-400"
+                      />
+                      <Sunrise className="size-4" aria-hidden />
+                      No volvió a dormirse
+                    </label>
+                  )}
                   <label className="mb-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-line bg-white/[0.03] px-3 py-2 text-sm text-ink-2 has-[:checked]:border-sky-400/50 has-[:checked]:bg-sky-400/10 has-[:checked]:text-sky-100">
                     <input
                       type="checkbox"
@@ -718,7 +776,7 @@ function TimeField({
           {extra}
         </div>
       </div>
-      <div className="flex min-w-0 items-center gap-2 sm:w-[19rem]">
+      <div className="flex min-w-0 items-center gap-2 sm:w-[21rem]">
         <input
           id={id}
           type="datetime-local"

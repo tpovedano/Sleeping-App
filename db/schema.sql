@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS sleep_sessions (
   night_wakings  jsonb NOT NULL DEFAULT '[]'::jsonb, -- despertares (noche o siesta): [{ at, durationMin, accompaniment[] }]
   location       text,                               -- dónde durmió
   failed         boolean NOT NULL DEFAULT false,     -- siesta fallida (no se durmió)
+  dramatic_wake  timestamptz,                        -- noche: «despertar dramático» (opcional)
   notes          text,
   created_at     timestamptz NOT NULL DEFAULT now(),
   updated_at     timestamptz NOT NULL DEFAULT now(),
@@ -23,3 +24,4 @@ CREATE INDEX IF NOT EXISTS sleep_sessions_sleep_start_idx ON sleep_sessions (sle
 ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS night_wakings jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS location text;
 ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS failed boolean NOT NULL DEFAULT false;
+ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS dramatic_wake timestamptz;

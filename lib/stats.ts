@@ -50,6 +50,10 @@ export interface PeriodAverages {
   wakeTime: number | null; // minuto del día
   wakingsPerNight: number | null;
   wakingMinPerNight: number | null;
+  /** hora media del «despertar dramático» (minuto del día) */
+  dramaticWake: number | null;
+  /** noches en las que no volvió a dormirse tras el último despertar */
+  endedAwakeNights: number;
 }
 
 export interface WeekSummary extends PeriodAverages {
@@ -159,6 +163,10 @@ export interface Dashboard {
     moodAfter: number | null;
     wakings: number;
     wakingMin: number;
+    /** minuto del día del último despertar si no volvió a dormirse */
+    awakeFrom: number | null;
+    /** minuto del día del «despertar dramático» */
+    dramaticWake: number | null;
   } | null;
   inProgress: { kind: SleepKind; sinceMin: number } | null;
   baseline: PeriodAverages;
@@ -292,6 +300,11 @@ function averages(days: DaySummary[], sessions: Enriched[], tz: string): PeriodA
     wakeTime: clockMean(nights.map((s) => minuteOfDay(s.end!, tz)), 0),
     wakingsPerNight: mean(nights.map((s) => s.wakings.length)),
     wakingMinPerNight: mean(nights.map((s) => s.wakingMin)),
+    dramaticWake: clockMean(
+      nights.filter((s) => s.dramaticWake).map((s) => minuteOfDay(Date.parse(s.dramaticWake!), tz)),
+      0,
+    ),
+    endedAwakeNights: nights.filter((s) => s.wakings.some((w) => w.final)).length,
   };
 }
 
@@ -636,6 +649,11 @@ export function buildDashboard(
           moodAfter: lastNightS.moodAfter,
           wakings: lastNightS.wakings.length,
           wakingMin: lastNightS.wakingMin,
+          awakeFrom: (() => {
+            const f = lastNightS.wakings.find((w) => w.final);
+            return f ? minuteOfDay(Date.parse(f.at), tz) : null;
+          })(),
+          dramaticWake: lastNightS.dramaticWake ? minuteOfDay(Date.parse(lastNightS.dramaticWake), tz) : null,
         }
       : null;
   const open = [...all].reverse().find((s) => s.end == null && now - s.start < DAY);

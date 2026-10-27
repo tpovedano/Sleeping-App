@@ -117,6 +117,8 @@ export function Dashboard({ data }: { data: Data }) {
                       data.lastNight.wakings
                         ? ` · ${data.lastNight.wakings} ${data.lastNight.wakings === 1 ? "despertar" : "despertares"} (${formatDuration(data.lastNight.wakingMin)})`
                         : " · sin despertares"
+                    }${data.lastNight.awakeFrom != null ? ` · despierta desde ${formatClock(data.lastNight.awakeFrom)}` : ""}${
+                      data.lastNight.dramaticWake != null ? ` · despertar dramático ${formatClock(data.lastNight.dramaticWake)}` : ""
                     }`
                   : "Sin registro reciente"
               }
@@ -150,7 +152,7 @@ export function Dashboard({ data }: { data: Data }) {
           </section>
 
           {/* Medias del periodo */}
-          <section aria-label="Medias del periodo" className="card grid grid-cols-2 gap-px overflow-hidden bg-line p-0 sm:grid-cols-4">
+          <section aria-label="Medias del periodo" className="card grid grid-cols-2 gap-px overflow-hidden bg-line p-0 sm:grid-cols-5">
             <Avg icon={Moon} label="Se duerme (noche)" value={baseline.bedtime != null ? formatClock(baseline.bedtime) : "—"} />
             <Avg icon={AlarmClock} label="Se despierta" value={baseline.wakeTime != null ? formatClock(baseline.wakeTime) : "—"} />
             <Avg icon={BedDouble} label="Sueño / día" value={formatDuration(baseline.totalMin)} />
@@ -171,6 +173,12 @@ export function Dashboard({ data }: { data: Data }) {
                   : "—"
               }
             />
+            <Avg
+              icon={Sunrise}
+              label="Despertar dramático"
+              value={baseline.dramaticWake != null ? formatClock(baseline.dramaticWake) : "—"}
+            />
+            <Avg icon={AlarmClock} label="No volvió a dormirse" value={`${baseline.endedAwakeNights} ${baseline.endedAwakeNights === 1 ? "noche" : "noches"}`} />
           </section>
           <p className="-mt-3 px-1 text-xs text-muted">
             Medias de {rangeText} (sin contar hoy) · {baseline.days} {baseline.days === 1 ? "día" : "días"} con datos
